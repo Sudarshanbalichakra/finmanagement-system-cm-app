@@ -19,19 +19,24 @@ import {
 import { Text } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { useAuthStore } from "@/store/auth.store";
-import { MobileApi } from "@/services/api";
-import { CustomerFeedItem, MobileFeedData, MobileFeedStats } from "@/types/cm.types";
 import { CollectCashModal } from "@/components/collection/collect-cash-modal";
-import { CustomerDetailsModal } from "@/components/customer/customer-details-modal";
 import { CustomerCard } from "@/components/customer/customer-card";
+import { CustomerDetailsModal } from "@/components/customer/customer-details-modal";
+import { MobileApi } from "@/services/api";
+import { useAuthStore } from "@/store/auth.store";
+import {
+  CustomerFeedItem,
+  MobileFeedData,
+  MobileFeedStats,
+} from "@/types/cm.types";
+import { getFriendlyErrorMessage } from "@/utils/error-handler";
 
 type FilterType = "ALL" | "PENDING" | "VISITED" | "LOANS" | "PIGMY";
 
 export default function HomeScreen() {
   const user = useAuthStore((state) => state.user);
   const [selectedDate, setSelectedDate] = useState<string>(
-    new Date().toISOString().split("T")[0]
+    new Date().toISOString().split("T")[0],
   );
   const [feedData, setFeedData] = useState<MobileFeedData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -46,9 +51,14 @@ export default function HomeScreen() {
   // Modals state
   const [collectModalVisible, setCollectModalVisible] = useState(false);
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
-  const [selectedCustomer, setSelectedCustomer] = useState<CustomerFeedItem | null>(null);
-  const [initialCollectType, setInitialCollectType] = useState<"LOAN" | "PIGMY">("LOAN");
-  const [initialTargetId, setInitialTargetId] = useState<string | undefined>(undefined);
+  const [selectedCustomer, setSelectedCustomer] =
+    useState<CustomerFeedItem | null>(null);
+  const [initialCollectType, setInitialCollectType] = useState<
+    "LOAN" | "PIGMY"
+  >("LOAN");
+  const [initialTargetId, setInitialTargetId] = useState<string | undefined>(
+    undefined,
+  );
 
   const fetchFeed = useCallback(
     async (isManualRefresh = false) => {
@@ -64,21 +74,25 @@ export default function HomeScreen() {
         if (response.success && response.data) {
           setFeedData(response.data);
         } else {
-          setErrorMessage(response.message || "Failed to load collection feed.");
+          setErrorMessage(
+            getFriendlyErrorMessage(
+              response.message,
+              "Unable to load today's collection route. Please try again."
+            )
+          );
         }
       } catch (err: any) {
-        console.error("Feed error:", err);
-        const msg =
-          err.response?.data?.message ||
-          err.message ||
-          "Unable to connect to server. Please check your connection.";
+        const msg = getFriendlyErrorMessage(
+          err,
+          "Unable to load today's collection route. Please try again."
+        );
         setErrorMessage(msg);
       } finally {
         setLoading(false);
         setRefreshing(false);
       }
     },
-    [selectedDate]
+    [selectedDate],
   );
 
   useEffect(() => {
@@ -89,14 +103,14 @@ export default function HomeScreen() {
     (
       customer: CustomerFeedItem,
       type?: "LOAN" | "PIGMY",
-      targetId?: string
+      targetId?: string,
     ) => {
       setSelectedCustomer(customer);
       if (type) setInitialCollectType(type);
       setInitialTargetId(targetId);
       setCollectModalVisible(true);
     },
-    []
+    [],
   );
 
   const handleOpenDetails = useCallback((customer: CustomerFeedItem) => {
@@ -128,7 +142,7 @@ export default function HomeScreen() {
       setDetailsModalVisible(false);
       handleOpenCollect(cust, type, targetId);
     },
-    [handleOpenCollect]
+    [handleOpenCollect],
   );
 
   // High-performance memoized filter list
@@ -160,7 +174,9 @@ export default function HomeScreen() {
         return c.hasActiveLoan || (c.loans && c.loans.length > 0);
       }
       if (activeFilter === "PIGMY") {
-        return c.hasActivePigmy || (c.pigmyAccounts && c.pigmyAccounts.length > 0);
+        return (
+          c.hasActivePigmy || (c.pigmyAccounts && c.pigmyAccounts.length > 0)
+        );
       }
       return true;
     });
@@ -182,7 +198,7 @@ export default function HomeScreen() {
 
   const keyExtractor = useCallback(
     (item: CustomerFeedItem) => item.customerId,
-    []
+    [],
   );
 
   const renderItem = useCallback(
@@ -194,7 +210,7 @@ export default function HomeScreen() {
         onCollect={handleOpenCollect}
       />
     ),
-    [handleOpenDetails, handleCall, handleOpenCollect]
+    [handleOpenDetails, handleCall, handleOpenCollect],
   );
 
   const renderHeader = useMemo(
@@ -390,7 +406,7 @@ export default function HomeScreen() {
       activeFilter,
       feedData?.customers?.length,
       errorMessage,
-    ]
+    ],
   );
 
   return (

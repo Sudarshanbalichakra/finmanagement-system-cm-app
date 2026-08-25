@@ -7,7 +7,11 @@ interface CustomerCardProps {
   item: CustomerFeedItem;
   onPress: (item: CustomerFeedItem) => void;
   onCall: (phone?: string) => void;
-  onCollect: (item: CustomerFeedItem) => void;
+  onCollect: (
+    item: CustomerFeedItem,
+    type?: "LOAN" | "PIGMY",
+    targetId?: string
+  ) => void;
 }
 
 export const CustomerCard = React.memo(
@@ -22,6 +26,26 @@ export const CustomerCard = React.memo(
     const initialChar = item.customerName
       ? item.customerName.charAt(0).toUpperCase()
       : "C";
+
+    const activeLoan = hasLoans ? item.loans[0] : null;
+    const activePigmy = hasPigmy ? item.pigmyAccounts[0] : null;
+
+    const loanPending = activeLoan ? !activeLoan.todayCollected : false;
+    const pigmyPending = activePigmy ? !activePigmy.todayCollected : false;
+    const allCollectedToday =
+      (hasLoans || hasPigmy) && !loanPending && !pigmyPending;
+
+    const handlePrimaryCollect = () => {
+      if (loanPending && activeLoan) {
+        onCollect(item, "LOAN", activeLoan.loanId);
+      } else if (pigmyPending && activePigmy) {
+        onCollect(item, "PIGMY", activePigmy.pigmyId);
+      } else if (hasLoans && activeLoan) {
+        onCollect(item, "LOAN", activeLoan.loanId);
+      } else if (hasPigmy && activePigmy) {
+        onCollect(item, "PIGMY", activePigmy.pigmyId);
+      }
+    };
 
     return (
       <TouchableOpacity
@@ -44,7 +68,11 @@ export const CustomerCard = React.memo(
               >
                 {item.customerName}
               </Text>
-              {item.todayVisited ? (
+              {allCollectedToday ? (
+                <View style={styles.visitedBadge}>
+                  <Text style={styles.visitedBadgeText}>✅ Collected Today</Text>
+                </View>
+              ) : item.todayVisited ? (
                 <View style={styles.visitedBadge}>
                   <Text style={styles.visitedBadgeText}>✅ Visited</Text>
                 </View>
@@ -78,57 +106,60 @@ export const CustomerCard = React.memo(
 
         {/* Account Details Pills */}
         <View style={styles.accountsContainer}>
-          {hasLoans && (
+          {hasLoans && activeLoan && (
             <View style={styles.accountPill}>
-              <View>
-                <Text style={styles.pillLabel}>Active Loan</Text>
+              <View style={styles.pillTextWrap}>
+                <Text style={styles.pillLabel}>Loan: {activeLoan.loanId}</Text>
                 <Text style={styles.pillValueRed}>
-                  ₹{item.loans[0].pendingAmount?.toLocaleString("en-IN") || "0"}{" "}
-                  Due
+                  ₹{activeLoan.pendingAmount?.toLocaleString("en-IN") || "0"} Due
                 </Text>
               </View>
-              <Text
-                style={[
-                  styles.pillStatus,
-                  item.loans[0].todayCollected
-                    ? styles.pillStatusDone
-                    : styles.pillStatusPending,
-                ]}
-              >
-                {item.loans[0].todayCollected ? "✅ Paid" : "⏳ Due"}
-              </Text>
+              {activeLoan.todayCollected ? (
+                <View style={styles.pillStatusDoneBox}>
+                  <Text style={styles.pillStatusDoneText}>
+                    ✅ Collected ₹{activeLoan.todayCollectionAmount || 0} Today
+                  </Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={styles.pillActionBtn}
+                  onPress={() => onCollect(item, "LOAN", activeLoan.loanId)}
+                >
+                  <Text style={styles.pillActionBtnText}>Collect Loan</Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
 
-          {hasPigmy && (
+          {hasPigmy && activePigmy && (
             <View style={styles.accountPill}>
-              <View>
-                <Text style={styles.pillLabel}>Pigmy Savings</Text>
+              <View style={styles.pillTextWrap}>
+                <Text style={styles.pillLabel}>
+                  Pigmy: {activePigmy.pigmyId}
+                </Text>
                 <Text style={styles.pillValueGreen}>
-                  ₹
-                  {item.pigmyAccounts[0].totalSavedAmount?.toLocaleString(
-                    "en-IN"
-                  ) || "0"}{" "}
-                  Saved
+                  ₹{activePigmy.totalSavedAmount?.toLocaleString("en-IN") || "0"} Saved
                 </Text>
               </View>
-              <Text
-                style={[
-                  styles.pillStatus,
-                  item.pigmyAccounts[0].todayCollected
-                    ? styles.pillStatusDone
-                    : styles.pillStatusPending,
-                ]}
-              >
-                {item.pigmyAccounts[0].todayCollected
-                  ? "✅ Deposited"
-                  : "⏳ Due"}
-              </Text>
+              {activePigmy.todayCollected ? (
+                <View style={styles.pillStatusDoneBox}>
+                  <Text style={styles.pillStatusDoneText}>
+                    ✅ Deposited ₹{activePigmy.todayCollectionAmount || 0} Today
+                  </Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={styles.pillActionBtnPigmy}
+                  onPress={() => onCollect(item, "PIGMY", activePigmy.pigmyId)}
+                >
+                  <Text style={styles.pillActionBtnText}>Collect Pigmy</Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
         </View>
 
-        {/* Quick Action Buttons */}
+        {/* Card Actions */}
         <View style={styles.cardActions}>
           <TouchableOpacity
             style={styles.detailsBtn}
@@ -137,18 +168,31 @@ export const CustomerCard = React.memo(
             <Text style={styles.detailsBtnText}>Passbook</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.collectBtn}
-            onPress={() => onCollect(item)}
-          >
-            <Text style={styles.collectBtnText}>+ Collect Cash</Text>
-          </TouchableOpacity>
+          {allCollectedToday ? (
+            <View style={styles.collectBtnDisabled}>
+              <Text style={styles.collectBtnDisabledText}>
+                ✅ All Collected Today
+              </Text>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.collectBtn}
+              onPress={handlePrimaryCollect}
+            >
+              <Text style={styles.collectBtnText}>
+                {loanPending && pigmyPending
+                  ? "+ Collect Cash"
+                  : loanPending
+                  ? "+ Collect Loan Cash"
+                  : "+ Collect Pigmy Cash"}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </TouchableOpacity>
     );
   },
   (prev, next) => {
-    // Custom shallow comparator to prevent re-rendering when other items change
     return (
       prev.item.customerId === next.item.customerId &&
       prev.item.customerName === next.item.customerName &&
@@ -276,6 +320,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
+  pillTextWrap: {
+    flex: 1,
+  },
   pillLabel: {
     fontSize: 10,
     fontWeight: "700",
@@ -294,20 +341,33 @@ const styles = StyleSheet.create({
     color: "#059669",
     marginTop: 1,
   },
-  pillStatus: {
-    fontSize: 11,
-    fontWeight: "700",
+  pillStatusDoneBox: {
+    backgroundColor: "#d1fae5",
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: 4,
     borderRadius: 6,
   },
-  pillStatusDone: {
-    backgroundColor: "#d1fae5",
+  pillStatusDoneText: {
     color: "#065f46",
+    fontSize: 11,
+    fontWeight: "700",
   },
-  pillStatusPending: {
+  pillActionBtn: {
     backgroundColor: "#fee2e2",
-    color: "#991b1b",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  pillActionBtnPigmy: {
+    backgroundColor: "#fef3c7",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  pillActionBtnText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#1f2937",
   },
   cardActions: {
     flexDirection: "row",
@@ -340,5 +400,19 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "800",
     fontSize: 13,
+  },
+  collectBtnDisabled: {
+    flex: 1.6,
+    paddingVertical: 10,
+    backgroundColor: "#f3f4f6",
+    borderRadius: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+  },
+  collectBtnDisabledText: {
+    color: "#059669",
+    fontWeight: "700",
+    fontSize: 12,
   },
 });

@@ -18,6 +18,8 @@ import { PrimaryButton } from "@/components/forms/primary-button";
 import { cmLoginApi } from "@/services/api";
 import { useAuthStore } from "@/store/auth.store";
 
+import { getFriendlyErrorMessage } from "@/utils/error-handler";
+
 const loginSchema = z.object({
   collectionManagerId: z
     .string()
@@ -67,30 +69,11 @@ export default function CMLoginScreen() {
       // Navigate to CM Dashboard
       router.replace("/(tabs)");
     } catch (error: any) {
-      if (error.response) {
-        const status = error.response.status;
-        const serverMsg = (error.response.data?.message || "").toLowerCase();
-
-        if (status === 403 || serverMsg.includes("inactive") || serverMsg.includes("disabled")) {
-          setErrorMessage(
-            "Your account is inactive. Please contact your administrator."
-          );
-        } else if (status === 401 || status === 400 || serverMsg.includes("invalid") || serverMsg.includes("unauthorized") || serverMsg.includes("credential")) {
-          setErrorMessage("Invalid Collection Manager ID or password.");
-        } else {
-          setErrorMessage(
-            error.response.data?.message || "Invalid Collection Manager ID or password."
-          );
-        }
-      } else if (error.code === "ECONNABORTED" || error.message?.includes("Network Error") || error.request) {
-        setErrorMessage(
-          "Unable to connect to the server. Please check your internet connection and try again."
-        );
-      } else {
-        setErrorMessage(
-          error.message || "An unexpected error occurred. Please try again."
-        );
-      }
+      const friendlyMsg = getFriendlyErrorMessage(
+        error,
+        "Invalid Collection Manager ID or password."
+      );
+      setErrorMessage(friendlyMsg);
     } finally {
       setLoading(false);
     }

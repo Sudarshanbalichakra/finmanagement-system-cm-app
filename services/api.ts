@@ -171,11 +171,16 @@ export const MobileApi = {
     data: LoanCollectionResult;
     message?: string;
   }> => {
+    const cmId = useAuthStore.getState().user?.collectionManagerId;
+    const body = {
+      ...payload,
+      collectionManagerId: payload.collectionManagerId || cmId,
+    };
     const response = await apiClient.post<{
       success: boolean;
       data: LoanCollectionResult;
       message?: string;
-    }>("/daily-collections", payload);
+    }>("/daily-collections", body);
     return response.data;
   },
 
@@ -191,11 +196,16 @@ export const MobileApi = {
     data: PigmyCollectionResult;
     message?: string;
   }> => {
+    const cmId = useAuthStore.getState().user?.collectionManagerId;
+    const body = {
+      ...payload,
+      collectionManagerId: payload.collectionManagerId || cmId,
+    };
     const response = await apiClient.post<{
       success: boolean;
       data: PigmyCollectionResult;
       message?: string;
-    }>(`/pigmy-accounts/${pigmyId}/collections`, payload);
+    }>(`/pigmy-accounts/${pigmyId}/collections`, body);
     return response.data;
   },
 

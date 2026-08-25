@@ -14,6 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuthStore } from "@/store/auth.store";
 import { MobileApi } from "@/services/api";
 import { DailySummaryData } from "@/types/cm.types";
+import { getFriendlyErrorMessage } from "@/utils/error-handler";
 
 export default function SummaryScreen() {
   const user = useAuthStore((state) => state.user);
@@ -39,14 +40,18 @@ export default function SummaryScreen() {
         if (res.success && res.data) {
           setSummaryData(res.data);
         } else {
-          setErrorMessage(res.message || "Failed to load daily summary.");
+          setErrorMessage(
+            getFriendlyErrorMessage(
+              res.message,
+              "Unable to load daily summary. Please try again."
+            )
+          );
         }
       } catch (err: any) {
-        console.error("Summary error:", err);
-        const msg =
-          err.response?.data?.message ||
-          err.message ||
-          "Unable to load daily summary.";
+        const msg = getFriendlyErrorMessage(
+          err,
+          "Unable to load daily summary. Please try again."
+        );
         setErrorMessage(msg);
       } finally {
         setLoading(false);

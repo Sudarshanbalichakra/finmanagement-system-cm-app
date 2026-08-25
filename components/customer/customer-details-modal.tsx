@@ -18,6 +18,7 @@ import {
   PigmyLedgerItem,
 } from "@/types/cm.types";
 import { MobileApi } from "@/services/api";
+import { getFriendlyErrorMessage } from "@/utils/error-handler";
 
 interface CustomerDetailsModalProps {
   visible: boolean;
@@ -81,7 +82,7 @@ export function CustomerDetailsModal({
         [loanId]: {
           loading: false,
           items: [],
-          error: err.message || "Failed to load ledger",
+          error: getFriendlyErrorMessage(err, "Unable to load collection ledger history."),
         },
       }));
     }
@@ -105,7 +106,7 @@ export function CustomerDetailsModal({
         [pigmyId]: {
           loading: false,
           items: [],
-          error: err.message || "Failed to load passbook",
+          error: getFriendlyErrorMessage(err, "Unable to load pigmy passbook history."),
         },
       }));
     }
@@ -225,14 +226,22 @@ export function CustomerDetailsModal({
                           <Text style={styles.cardId}>Loan #{loan.loanId}</Text>
                           <Text style={styles.cardStatus}>{loan.status}</Text>
                         </View>
-                        <TouchableOpacity
-                          style={styles.collectMiniButton}
-                          onPress={() =>
-                            onOpenCollect(customer, "LOAN", loan.loanId)
-                          }
-                        >
-                          <Text style={styles.collectMiniText}>+ Collect</Text>
-                        </TouchableOpacity>
+                        {loan.todayCollected ? (
+                          <View style={styles.collectMiniButtonDisabled}>
+                            <Text style={styles.collectMiniTextDisabled}>
+                              ✅ Paid (₹{loan.todayCollectionAmount || 0})
+                            </Text>
+                          </View>
+                        ) : (
+                          <TouchableOpacity
+                            style={styles.collectMiniButton}
+                            onPress={() =>
+                              onOpenCollect(customer, "LOAN", loan.loanId)
+                            }
+                          >
+                            <Text style={styles.collectMiniText}>+ Collect</Text>
+                          </TouchableOpacity>
+                        )}
                       </View>
 
                       {/* Loan Figures (Directly from API) */}
@@ -343,14 +352,22 @@ export function CustomerDetailsModal({
                             {pigmy.schemeName || "Daily Savings"}
                           </Text>
                         </View>
-                        <TouchableOpacity
-                          style={styles.collectMiniButton}
-                          onPress={() =>
-                            onOpenCollect(customer, "PIGMY", pigmy.pigmyId)
-                          }
-                        >
-                          <Text style={styles.collectMiniText}>+ Deposit</Text>
-                        </TouchableOpacity>
+                        {pigmy.todayCollected ? (
+                          <View style={styles.collectMiniButtonDisabled}>
+                            <Text style={styles.collectMiniTextDisabled}>
+                              ✅ Deposited (₹{pigmy.todayCollectionAmount || 0})
+                            </Text>
+                          </View>
+                        ) : (
+                          <TouchableOpacity
+                            style={styles.collectMiniButton}
+                            onPress={() =>
+                              onOpenCollect(customer, "PIGMY", pigmy.pigmyId)
+                            }
+                          >
+                            <Text style={styles.collectMiniText}>+ Deposit</Text>
+                          </TouchableOpacity>
+                        )}
                       </View>
 
                       {/* Pigmy Figures */}
@@ -656,6 +673,19 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "800",
     fontSize: 13,
+  },
+  collectMiniButtonDisabled: {
+    backgroundColor: "#f3f4f6",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+  },
+  collectMiniTextDisabled: {
+    color: "#059669",
+    fontWeight: "700",
+    fontSize: 12,
   },
   figuresGrid: {
     flexDirection: "row",

@@ -76,6 +76,7 @@ export interface RecordLoanCollectionPayload {
   customerId: string;
   amount: number;
   collectionDate?: string;
+  collectionManagerId?: string;
 }
 
 export interface LoanCollectionResult {
@@ -91,6 +92,8 @@ export interface LoanCollectionResult {
 export interface RecordPigmyCollectionPayload {
   amount: number;
   collectionDate?: string;
+  customerId?: string;
+  collectionManagerId?: string;
 }
 
 export interface PigmyCollectionResult {

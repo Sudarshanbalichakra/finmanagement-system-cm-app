@@ -1,18 +1,19 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
+  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
   ScrollView,
   StyleSheet,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { ActivityIndicator, Text } from "react-native-paper";
-import { CustomerFeedItem, LoanItem, PigmyAccountItem } from "@/types/cm.types";
+import { CustomerFeedItem } from "@/types/cm.types";
 import { MobileApi } from "@/services/api";
-import { Input } from "@/components/forms/input";
-import { PrimaryButton } from "@/components/forms/primary-button";
+import { getFriendlyErrorMessage } from "@/utils/error-handler";
 
 interface CollectCashModalProps {
   visible: boolean;
@@ -24,7 +25,7 @@ interface CollectCashModalProps {
   initialPigmyId?: string;
 }
 
-export function CollectCashModal({
+export const CollectCashModal = React.memo(function CollectCashModal({
   visible,
   customer,
   onClose,
@@ -37,26 +38,32 @@ export function CollectCashModal({
   const [selectedLoanId, setSelectedLoanId] = useState<string>("");
   const [selectedPigmyId, setSelectedPigmyId] = useState<string>("");
   const [amount, setAmount] = useState<string>("");
-  const [collectionDate, setCollectionDate] = useState<string>(
-    new Date().toISOString().split("T")[0]
-  );
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [inlineError, setInlineError] = useState<string | null>(null);
+
+  // Strictly locked today's date (YYYY-MM-DD)
+  const todayDateStr = useMemo(() => new Date().toISOString().split("T")[0], []);
 
   // Synchronize state when customer or modal opens
   useEffect(() => {
     if (customer && visible) {
-      setError(null);
-      setSuccessMsg(null);
+      setInlineError(null);
       setAmount("");
-      setCollectionDate(new Date().toISOString().split("T")[0]);
 
-      const hasLoans = customer.loans && customer.loans.length > 0;
-      const hasPigmy = customer.pigmyAccounts && customer.pigmyAccounts.length > 0;
+      const activeLoans = (customer.loans || []).filter((l) => l.status === "ACTIVE" || !l.todayCollected);
+      const allLoans = customer.loans || [];
+      const hasLoans = allLoans.length > 0;
+
+      const activePigmy = (customer.pigmyAccounts || []).filter((p) => p.status === "ACTIVE" || !p.todayCollected);
+      const allPigmy = customer.pigmyAccounts || [];
+      const hasPigmy = allPigmy.length > 0;
 
       if (initialType) {
         setCollectionType(initialType);
+      } else if (activeLoans.length > 0) {
+        setCollectionType("LOAN");
+      } else if (activePigmy.length > 0) {
+        setCollectionType("PIGMY");
       } else if (hasLoans) {
         setCollectionType("LOAN");
       } else if (hasPigmy) {
@@ -65,14 +72,14 @@ export function CollectCashModal({
 
       if (initialLoanId) {
         setSelectedLoanId(initialLoanId);
-      } else if (hasLoans) {
-        setSelectedLoanId(customer.loans[0].loanId);
+      } else if (allLoans.length > 0) {
+        setSelectedLoanId(activeLoans[0]?.loanId || allLoans[0].loanId);
       }
 
       if (initialPigmyId) {
         setSelectedPigmyId(initialPigmyId);
-      } else if (hasPigmy) {
-        setSelectedPigmyId(customer.pigmyAccounts[0].pigmyId);
+      } else if (allPigmy.length > 0) {
+        setSelectedPigmyId(activePigmy[0]?.pigmyId || allPigmy[0].pigmyId);
       }
     }
   }, [customer, visible, initialType, initialLoanId, initialPigmyId]);
@@ -82,72 +89,117 @@ export function CollectCashModal({
   const activeLoans = customer.loans || [];
   const activePigmyAccounts = customer.pigmyAccounts || [];
 
-  const selectedLoan = activeLoans.find((l) => l.loanId === selectedLoanId) || activeLoans[0];
+  const selectedLoan =
+    activeLoans.find((l) => l.loanId === selectedLoanId) || activeLoans[0];
   const selectedPigmy =
     activePigmyAccounts.find((p) => p.pigmyId === selectedPigmyId) ||
     activePigmyAccounts[0];
 
+  // Check if currently selected account is already collected today
+  const isCurrentAccountCollected =
+    collectionType === "LOAN"
+      ? Boolean(selectedLoan?.todayCollected)
+      : Boolean(selectedPigmy?.todayCollected);
+
+  const collectedTodayAmount =
+    collectionType === "LOAN"
+      ? selectedLoan?.todayCollectionAmount || 0
+      : selectedPigmy?.todayCollectionAmount || 0;
+
   const handleAddAmount = (add: number) => {
+    if (isCurrentAccountCollected) return;
     const current = parseFloat(amount) || 0;
     setAmount((current + add).toString());
-    setError(null);
+    setInlineError(null);
   };
 
   const handleSetAmount = (val: number) => {
+    if (isCurrentAccountCollected) return;
     setAmount(val.toString());
-    setError(null);
+    setInlineError(null);
   };
 
-  const handleSubmit = async () => {
-    const numAmount = parseFloat(amount.trim());
-    if (isNaN(numAmount) || numAmount <= 0) {
-      setError("Please enter a valid collection amount greater than 0");
+  const handleConfirmAndSave = () => {
+    if (isCurrentAccountCollected) {
+      Alert.alert(
+        "Already Collected",
+        "A daily collection has already been recorded for this account today and cannot be modified."
+      );
       return;
     }
 
-    setLoading(true);
-    setError(null);
-
-    try {
-      if (collectionType === "LOAN") {
-        if (!selectedLoan?.loanId) {
-          throw new Error("No loan account selected");
-        }
-        await MobileApi.recordLoanCollection({
-          loanId: selectedLoan.loanId,
-          customerId: customer.customerId,
-          amount: numAmount,
-          collectionDate: collectionDate,
-        });
-      } else {
-        if (!selectedPigmy?.pigmyId) {
-          throw new Error("No pigmy savings account selected");
-        }
-        await MobileApi.recordPigmyCollection(selectedPigmy.pigmyId, {
-          amount: numAmount,
-          collectionDate: collectionDate,
-        });
-      }
-
-      setSuccessMsg(
-        `₹${numAmount.toLocaleString("en-IN")} collected successfully!`
-      );
-
-      setTimeout(() => {
-        setSuccessMsg(null);
-        onSuccess();
-        onClose();
-      }, 1000);
-    } catch (err: any) {
-      console.error("Collection error:", err);
-      const msg =
-        err.response?.data?.message ||
-        err.message ||
-        "Failed to record collection. Please try again.";
-      setError(msg);
-    } finally {
-      setLoading(false);
+    const numAmount = parseFloat(amount.trim());
+    if (isNaN(numAmount) || numAmount <= 0) {
+      setInlineError("Please enter a valid cash amount greater than 0.");
+      Alert.alert("Validation Error", "Please enter a valid cash amount greater than 0.");
+      return;
     }
+
+    if (collectionType === "LOAN" && selectedLoan?.pendingAmount && numAmount > selectedLoan.pendingAmount) {
+      const errMsg = `Amount cannot exceed pending loan balance of ₹${selectedLoan.pendingAmount.toLocaleString("en-IN")}`;
+      setInlineError(errMsg);
+      Alert.alert("Validation Error", errMsg);
+      return;
+    }
+
+    const typeLabel = collectionType === "LOAN" ? "Loan Payment" : "Pigmy Deposit";
+    const accountCode = collectionType === "LOAN" ? selectedLoan?.loanId : selectedPigmy?.pigmyId;
+
+    // Immutability confirmation popup
+    Alert.alert(
+      "Confirm Cash Collection",
+      `Record ₹${numAmount.toLocaleString("en-IN")} ${typeLabel} (${accountCode}) for ${customer.customerName}?\n\n🔒 Note: Once saved, this collection entry is immutable and cannot be edited or deleted.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Confirm & Save Cash",
+          style: "default",
+          onPress: async () => {
+            setLoading(true);
+            setInlineError(null);
+
+            try {
+              if (collectionType === "LOAN") {
+                if (!selectedLoan?.loanId) {
+                  throw new Error("No loan account selected");
+                }
+                await MobileApi.recordLoanCollection({
+                  loanId: selectedLoan.loanId,
+                  customerId: customer.customerId,
+                  amount: numAmount,
+                  collectionDate: todayDateStr,
+                });
+              } else {
+                if (!selectedPigmy?.pigmyId) {
+                  throw new Error("No pigmy savings account selected");
+                }
+                await MobileApi.recordPigmyCollection(selectedPigmy.pigmyId, {
+                  amount: numAmount,
+                  collectionDate: todayDateStr,
+                  customerId: customer.customerId,
+                });
+              }
+
+              Alert.alert(
+                "Collection Recorded",
+                `₹${numAmount.toLocaleString("en-IN")} collection successfully saved for ${customer.customerName}.`
+              );
+              onSuccess();
+              onClose();
+            } catch (err: any) {
+              const displayMsg = getFriendlyErrorMessage(
+                err,
+                "Unable to record collection. Please check your network and try again."
+              );
+              setInlineError(displayMsg);
+              Alert.alert("Collection Failed", displayMsg);
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -164,15 +216,20 @@ export function CollectCashModal({
         <View style={styles.modalContent}>
           {/* Header */}
           <View style={styles.header}>
-            <View>
+            <View style={styles.headerTextWrap}>
               <Text variant="titleLarge" style={styles.title}>
-                Collect Daily Cash
+                {isCurrentAccountCollected ? "Collection Details (View Only)" : "Collect Cash"}
               </Text>
-              <Text style={styles.customerName}>
+              <Text style={styles.customerName} numberOfLines={1}>
                 {customer.customerName} ({customer.customerId})
               </Text>
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.closeButton}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              disabled={loading}
+            >
               <Text style={styles.closeText}>✕</Text>
             </TouchableOpacity>
           </View>
@@ -182,23 +239,35 @@ export function CollectCashModal({
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.body}
           >
-            {/* Status messages */}
-            {error ? (
-              <View style={styles.errorBanner}>
-                <Text style={styles.errorText}>⚠️ {error}</Text>
+            {/* View-Only Collected Banner */}
+            {isCurrentAccountCollected ? (
+              <View style={styles.collectedBanner}>
+                <View style={styles.collectedBannerTop}>
+                  <Text style={styles.collectedBannerIcon}>✅</Text>
+                  <Text style={styles.collectedBannerTitle}>
+                    Daily Collection Completed
+                  </Text>
+                </View>
+                <Text style={styles.collectedBannerAmount}>
+                  ₹{collectedTodayAmount.toLocaleString("en-IN")}
+                </Text>
+                <Text style={styles.collectedBannerSubtitle}>
+                  Recorded on {todayDateStr}. This transaction is locked and immutable.
+                </Text>
               </View>
             ) : null}
 
-            {successMsg ? (
-              <View style={styles.successBanner}>
-                <Text style={styles.successText}>✅ {successMsg}</Text>
+            {/* Inline Error Banner */}
+            {inlineError ? (
+              <View style={styles.errorBanner}>
+                <Text style={styles.errorText}>⚠️ {inlineError}</Text>
               </View>
             ) : null}
 
             {/* Product Type Tabs */}
             <View style={styles.typeTabs}>
               <TouchableOpacity
-                disabled={activeLoans.length === 0}
+                disabled={activeLoans.length === 0 || loading}
                 style={[
                   styles.tabButton,
                   collectionType === "LOAN" && styles.tabButtonActive,
@@ -206,7 +275,7 @@ export function CollectCashModal({
                 ]}
                 onPress={() => {
                   setCollectionType("LOAN");
-                  setError(null);
+                  setInlineError(null);
                 }}
               >
                 <Text
@@ -221,7 +290,7 @@ export function CollectCashModal({
               </TouchableOpacity>
 
               <TouchableOpacity
-                disabled={activePigmyAccounts.length === 0}
+                disabled={activePigmyAccounts.length === 0 || loading}
                 style={[
                   styles.tabButton,
                   collectionType === "PIGMY" && styles.tabButtonActive,
@@ -229,7 +298,7 @@ export function CollectCashModal({
                 ]}
                 onPress={() => {
                   setCollectionType("PIGMY");
-                  setError(null);
+                  setInlineError(null);
                 }}
               >
                 <Text
@@ -248,7 +317,7 @@ export function CollectCashModal({
             {collectionType === "LOAN" && selectedLoan ? (
               <View style={styles.accountCard}>
                 <View style={styles.cardHeaderRow}>
-                  <Text style={styles.cardIdBadge}>Loan: {selectedLoan.loanId}</Text>
+                  <Text style={styles.cardIdBadge}>Loan #{selectedLoan.loanId}</Text>
                   <Text
                     style={[
                       styles.statusPill,
@@ -257,11 +326,13 @@ export function CollectCashModal({
                         : styles.statusPillPending,
                     ]}
                   >
-                    {selectedLoan.todayCollected ? "✅ Paid Today" : "⏳ Pending"}
+                    {selectedLoan.todayCollected
+                      ? `✅ Collected ₹${selectedLoan.todayCollectionAmount || 0} Today`
+                      : "🔴 Pending Today"}
                   </Text>
                 </View>
 
-                {/* Multiple Loans Dropdown/Selector if > 1 */}
+                {/* Multiple Loans Selector if > 1 */}
                 {activeLoans.length > 1 && (
                   <View style={styles.multiAccountRow}>
                     {activeLoans.map((l) => (
@@ -279,7 +350,7 @@ export function CollectCashModal({
                             selectedLoanId === l.loanId && styles.chipTextActive,
                           ]}
                         >
-                          {l.loanId}
+                          {l.loanId} {l.todayCollected ? "✓" : ""}
                         </Text>
                       </TouchableOpacity>
                     ))}
@@ -306,16 +377,18 @@ export function CollectCashModal({
             {collectionType === "PIGMY" && selectedPigmy ? (
               <View style={styles.accountCard}>
                 <View style={styles.cardHeaderRow}>
-                  <Text style={styles.cardIdBadge}>Pigmy: {selectedPigmy.pigmyId}</Text>
+                  <Text style={styles.cardIdBadge}>Pigmy #{selectedPigmy.pigmyId}</Text>
                   <Text
                     style={[
                       styles.statusPill,
                       selectedPigmy.todayCollected
                         ? styles.statusPillDone
-                        : styles.statusPillPending,
+                        : styles.statusPillPendingPigmy,
                     ]}
                   >
-                    {selectedPigmy.todayCollected ? "✅ Deposited Today" : "⏳ Pending"}
+                    {selectedPigmy.todayCollected
+                      ? `✅ Deposited ₹${selectedPigmy.todayCollectionAmount || 0} Today`
+                      : "🟡 Pending Deposit"}
                   </Text>
                 </View>
 
@@ -337,7 +410,7 @@ export function CollectCashModal({
                             selectedPigmyId === p.pigmyId && styles.chipTextActive,
                           ]}
                         >
-                          {p.pigmyId}
+                          {p.pigmyId} {p.todayCollected ? "✓" : ""}
                         </Text>
                       </TouchableOpacity>
                     ))}
@@ -346,7 +419,7 @@ export function CollectCashModal({
 
                 <View style={styles.metricsGrid}>
                   <View style={styles.metricItem}>
-                    <Text style={styles.metricLabel}>Total Saved</Text>
+                    <Text style={styles.metricLabel}>Total Saved Amount</Text>
                     <Text style={styles.metricValueGreen}>
                       ₹{selectedPigmy.totalSavedAmount.toLocaleString("en-IN")}
                     </Text>
@@ -361,79 +434,129 @@ export function CollectCashModal({
               </View>
             ) : null}
 
-            {/* Collection Date Field */}
-            <Input
-              label="Collection Date (YYYY-MM-DD)"
-              value={collectionDate}
-              onChangeText={setCollectionDate}
-              placeholder="YYYY-MM-DD"
-              leftIcon="calendar"
-              editable={!loading}
-            />
-
-            {/* Cash Amount Field */}
-            <Input
-              label="Cash Amount (₹)"
-              value={amount}
-              onChangeText={(text) => {
-                setAmount(text);
-                setError(null);
-              }}
-              placeholder="Enter collected cash (e.g. 500)"
-              keyboardType="numeric"
-              leftIcon="currency-inr"
-              editable={!loading}
-            />
-
-            {/* Quick Amount Chips */}
-            <View style={styles.quickChipsRow}>
-              <TouchableOpacity
-                style={styles.quickChip}
-                onPress={() => handleAddAmount(100)}
-              >
-                <Text style={styles.quickChipText}>+₹100</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.quickChip}
-                onPress={() => handleAddAmount(200)}
-              >
-                <Text style={styles.quickChipText}>+₹200</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.quickChip}
-                onPress={() => handleAddAmount(500)}
-              >
-                <Text style={styles.quickChipText}>+₹500</Text>
-              </TouchableOpacity>
-              {collectionType === "LOAN" && selectedLoan?.pendingAmount ? (
-                <TouchableOpacity
-                  style={[styles.quickChip, styles.quickChipFull]}
-                  onPress={() => handleSetAmount(selectedLoan.pendingAmount)}
-                >
-                  <Text style={styles.quickChipFullText}>Full Due</Text>
-                </TouchableOpacity>
-              ) : null}
+            {/* 🔒 2. Date Field (Strictly Locked to Today) */}
+            <View style={styles.lockedDateContainer}>
+              <View style={styles.lockedDateHeader}>
+                <Text style={styles.lockedDateLabel}>Collection Date (Locked)</Text>
+                <Text style={styles.lockedBadge}>🔒 TODAY</Text>
+              </View>
+              <View style={styles.lockedInputBox}>
+                <Text style={styles.lockedInputText}>{todayDateStr}</Text>
+              </View>
+              <Text style={styles.lockedDateHint}>
+                Collections are strictly recorded for today's business date.
+              </Text>
             </View>
 
-            {/* Submit Action */}
-            <View style={styles.submitContainer}>
-              <PrimaryButton
-                title={
-                  collectionType === "LOAN"
-                    ? "Record Loan Payment"
-                    : "Record Pigmy Deposit"
-                }
-                onPress={handleSubmit}
-                loading={loading}
+            {/* 💵 3. Amount Input Field (Disabled / Hidden when already collected) */}
+            {!isCurrentAccountCollected ? (
+              <>
+                <View style={styles.amountContainer}>
+                  <Text style={styles.amountLabel}>Collected Cash Amount (₹) *</Text>
+                  <View style={styles.amountInputRow}>
+                    <Text style={styles.rupeePrefix}>₹</Text>
+                    <TextInput
+                      style={styles.amountInput}
+                      placeholder="Enter amount (e.g. 500)"
+                      placeholderTextColor="#9ca3af"
+                      keyboardType="numeric"
+                      value={amount}
+                      onChangeText={(text) => {
+                        setAmount(text);
+                        setInlineError(null);
+                      }}
+                      editable={!loading}
+                      autoFocus
+                    />
+                  </View>
+                  {collectionType === "LOAN" && selectedLoan?.pendingAmount ? (
+                    <Text style={styles.pendingHint}>
+                      Pending Loan Balance: ₹{selectedLoan.pendingAmount.toLocaleString("en-IN")}
+                    </Text>
+                  ) : null}
+                </View>
+
+                {/* Quick Amount Chips */}
+                <View style={styles.quickChipsRow}>
+                  <TouchableOpacity
+                    style={styles.quickChip}
+                    onPress={() => handleAddAmount(100)}
+                    disabled={loading}
+                  >
+                    <Text style={styles.quickChipText}>+₹100</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.quickChip}
+                    onPress={() => handleAddAmount(200)}
+                    disabled={loading}
+                  >
+                    <Text style={styles.quickChipText}>+₹200</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.quickChip}
+                    onPress={() => handleAddAmount(500)}
+                    disabled={loading}
+                  >
+                    <Text style={styles.quickChipText}>+₹500</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.quickChip}
+                    onPress={() => handleAddAmount(1000)}
+                    disabled={loading}
+                  >
+                    <Text style={styles.quickChipText}>+₹1000</Text>
+                  </TouchableOpacity>
+                  {collectionType === "LOAN" && selectedLoan?.pendingAmount ? (
+                    <TouchableOpacity
+                      style={[styles.quickChip, styles.quickChipFull]}
+                      onPress={() => handleSetAmount(selectedLoan.pendingAmount)}
+                      disabled={loading}
+                    >
+                      <Text style={styles.quickChipFullText}>Full Balance</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              </>
+            ) : null}
+
+            {/* Action Buttons */}
+            <View style={styles.buttonRow}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={onClose}
                 disabled={loading}
-              />
+              >
+                <Text style={styles.cancelBtnText}>
+                  {isCurrentAccountCollected ? "Close" : "Cancel"}
+                </Text>
+              </TouchableOpacity>
+
+              {isCurrentAccountCollected ? (
+                <View style={styles.disabledCollectedBtn}>
+                  <Text style={styles.disabledCollectedBtnText}>
+                    ✅ Collected ₹{collectedTodayAmount} Today
+                  </Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.confirmBtn, loading && styles.disabledBtn]}
+                  onPress={handleConfirmAndSave}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.confirmBtnText}>Confirm & Save Cash</Text>
+                  )}
+                </TouchableOpacity>
+              )}
             </View>
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
     </Modal>
   );
-}
+});
 
 const styles = StyleSheet.create({
   overlay: {
@@ -454,9 +577,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 24,
     paddingTop: 20,
-    paddingBottom: 12,
+    paddingBottom: 14,
     borderBottomWidth: 1,
     borderBottomColor: "#f3f4f6",
+  },
+  headerTextWrap: {
+    flex: 1,
+    paddingRight: 12,
   },
   title: {
     color: "#111827",
@@ -483,6 +610,42 @@ const styles = StyleSheet.create({
   body: {
     padding: 24,
   },
+  collectedBanner: {
+    backgroundColor: "#ecfdf5",
+    borderWidth: 1.5,
+    borderColor: "#a7f3d0",
+    borderRadius: 16,
+    padding: 16,
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  collectedBannerTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  collectedBannerIcon: {
+    fontSize: 16,
+  },
+  collectedBannerTitle: {
+    color: "#065f46",
+    fontSize: 13,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  collectedBannerAmount: {
+    color: "#047857",
+    fontSize: 28,
+    fontWeight: "900",
+    marginVertical: 4,
+  },
+  collectedBannerSubtitle: {
+    color: "#059669",
+    fontSize: 12,
+    fontWeight: "600",
+    textAlign: "center",
+  },
   errorBanner: {
     backgroundColor: "#fef2f2",
     borderWidth: 1,
@@ -495,19 +658,6 @@ const styles = StyleSheet.create({
     color: "#dc2626",
     fontSize: 13,
     fontWeight: "600",
-  },
-  successBanner: {
-    backgroundColor: "#ecfdf5",
-    borderWidth: 1,
-    borderColor: "#a7f3d0",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
-  },
-  successText: {
-    color: "#059669",
-    fontSize: 13,
-    fontWeight: "700",
   },
   typeTabs: {
     flexDirection: "row",
@@ -564,7 +714,7 @@ const styles = StyleSheet.create({
     color: "#1f2937",
   },
   statusPill: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -575,6 +725,10 @@ const styles = StyleSheet.create({
     color: "#065f46",
   },
   statusPillPending: {
+    backgroundColor: "#fee2e2",
+    color: "#991b1b",
+  },
+  statusPillPendingPigmy: {
     backgroundColor: "#fef3c7",
     color: "#92400e",
   },
@@ -630,10 +784,89 @@ const styles = StyleSheet.create({
     color: "#059669",
     marginTop: 2,
   },
+  lockedDateContainer: {
+    marginBottom: 18,
+  },
+  lockedDateHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 6,
+  },
+  lockedDateLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#374151",
+  },
+  lockedBadge: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#00A859",
+    backgroundColor: "#ecfdf5",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  lockedInputBox: {
+    height: 48,
+    backgroundColor: "#f3f4f6",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+  },
+  lockedInputText: {
+    fontSize: 15,
+    color: "#4b5563",
+    fontWeight: "600",
+  },
+  lockedDateHint: {
+    fontSize: 11,
+    color: "#6b7280",
+    marginTop: 4,
+  },
+  amountContainer: {
+    marginBottom: 16,
+  },
+  amountLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 6,
+  },
+  amountInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: "#00A859",
+    paddingHorizontal: 14,
+    height: 52,
+  },
+  rupeePrefix: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#00A859",
+    marginRight: 6,
+  },
+  amountInput: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  pendingHint: {
+    fontSize: 12,
+    color: "#dc2626",
+    fontWeight: "600",
+    marginTop: 6,
+  },
   quickChipsRow: {
     flexDirection: "row",
     gap: 8,
-    marginBottom: 20,
+    marginBottom: 24,
     flexWrap: "wrap",
   },
   quickChip: {
@@ -658,7 +891,50 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#dc2626",
   },
-  submitContainer: {
-    marginTop: 4,
+  buttonRow: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "center",
+  },
+  cancelBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 14,
+    backgroundColor: "#f3f4f6",
+    alignItems: "center",
+  },
+  cancelBtnText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#6b7280",
+  },
+  confirmBtn: {
+    flex: 1.8,
+    paddingVertical: 14,
+    borderRadius: 14,
+    backgroundColor: "#00A859",
+    alignItems: "center",
+  },
+  confirmBtnText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#fff",
+  },
+  disabledCollectedBtn: {
+    flex: 1.8,
+    paddingVertical: 14,
+    borderRadius: 14,
+    backgroundColor: "#f3f4f6",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+  },
+  disabledCollectedBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#059669",
+  },
+  disabledBtn: {
+    opacity: 0.6,
   },
 });
