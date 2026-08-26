@@ -1,7 +1,13 @@
+import { useAuthStore } from "@/store/auth.store";
+import { CustomerFeedItem } from "@/types/cm.types";
+import {
+  getCustomerVisitedStatus,
+  getLoanCollectionStatus,
+  getPigmyCollectionStatus,
+} from "@/utils/collection-status";
 import React from "react";
 import { StyleSheet, TouchableOpacity, View } from "react-native";
 import { Text } from "react-native-paper";
-import { CustomerFeedItem } from "@/types/cm.types";
 
 interface CustomerCardProps {
   item: CustomerFeedItem;
@@ -10,7 +16,7 @@ interface CustomerCardProps {
   onCollect: (
     item: CustomerFeedItem,
     type?: "LOAN" | "PIGMY",
-    targetId?: string
+    targetId?: string,
   ) => void;
 }
 
@@ -21,8 +27,14 @@ export const CustomerCard = React.memo(
     onCall,
     onCollect,
   }: CustomerCardProps) {
-    const hasLoans = item.loans && item.loans.length > 0;
-    const hasPigmy = item.pigmyAccounts && item.pigmyAccounts.length > 0;
+    const currentCMId = useAuthStore(
+      (state) => state.user?.collectionManagerId,
+    );
+
+    const hasLoans = Boolean(item.loans && item.loans.length > 0);
+    const hasPigmy = Boolean(
+      item.pigmyAccounts && item.pigmyAccounts.length > 0,
+    );
     const initialChar = item.customerName
       ? item.customerName.charAt(0).toUpperCase()
       : "C";
@@ -30,10 +42,17 @@ export const CustomerCard = React.memo(
     const activeLoan = hasLoans ? item.loans[0] : null;
     const activePigmy = hasPigmy ? item.pigmyAccounts[0] : null;
 
-    const loanPending = activeLoan ? !activeLoan.todayCollected : false;
-    const pigmyPending = activePigmy ? !activePigmy.todayCollected : false;
-    const allCollectedToday =
-      (hasLoans || hasPigmy) && !loanPending && !pigmyPending;
+    // Evaluate statuses using shared utility
+    const loanStatus = getLoanCollectionStatus(activeLoan, item, currentCMId);
+    const pigmyStatus = getPigmyCollectionStatus(
+      activePigmy,
+      item,
+      currentCMId,
+    );
+    const customerStatus = getCustomerVisitedStatus(item, currentCMId);
+
+    const loanPending = hasLoans ? !loanStatus.isPaid : false;
+    const pigmyPending = hasPigmy ? !pigmyStatus.isPaid : false;
 
     const handlePrimaryCollect = () => {
       if (loanPending && activeLoan) {
@@ -68,11 +87,7 @@ export const CustomerCard = React.memo(
               >
                 {item.customerName}
               </Text>
-              {allCollectedToday ? (
-                <View style={styles.visitedBadge}>
-                  <Text style={styles.visitedBadgeText}>✅ Collected Today</Text>
-                </View>
-              ) : item.todayVisited ? (
+              {customerStatus.isVisited ? (
                 <View style={styles.visitedBadge}>
                   <Text style={styles.visitedBadgeText}>✅ Visited</Text>
                 </View>
@@ -111,15 +126,28 @@ export const CustomerCard = React.memo(
               <View style={styles.pillTextWrap}>
                 <Text style={styles.pillLabel}>Loan: {activeLoan.loanId}</Text>
                 <Text style={styles.pillValueRed}>
-                  ₹{activeLoan.pendingAmount?.toLocaleString("en-IN") || "0"} Due
+                  ₹{activeLoan.pendingAmount?.toLocaleString("en-IN") || "0"}{" "}
+                  Due
                 </Text>
               </View>
-              {activeLoan.todayCollected ? (
-                <View style={styles.pillStatusDoneBox}>
-                  <Text style={styles.pillStatusDoneText}>
-                    ✅ Collected ₹{activeLoan.todayCollectionAmount || 0} Today
-                  </Text>
-                </View>
+
+              {loanStatus.isPaid ? (
+                loanStatus.isSelf ? (
+                  <View style={styles.pillStatusDoneBox}>
+                    <Text style={styles.pillStatusDoneText}>
+                      ✅ Today Collection Collected
+                      {loanStatus.collectedAmount > 0
+                        ? ` (₹${loanStatus.collectedAmount})`
+                        : ""}
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.pillStatusColleagueBox}>
+                    <Text style={styles.pillStatusColleagueText}>
+                      👥 Collected by Colleague
+                    </Text>
+                  </View>
+                )
               ) : (
                 <TouchableOpacity
                   style={styles.pillActionBtn}
@@ -138,15 +166,29 @@ export const CustomerCard = React.memo(
                   Pigmy: {activePigmy.pigmyId}
                 </Text>
                 <Text style={styles.pillValueGreen}>
-                  ₹{activePigmy.totalSavedAmount?.toLocaleString("en-IN") || "0"} Saved
+                  ₹
+                  {activePigmy.totalSavedAmount?.toLocaleString("en-IN") || "0"}{" "}
+                  Saved
                 </Text>
               </View>
-              {activePigmy.todayCollected ? (
-                <View style={styles.pillStatusDoneBox}>
-                  <Text style={styles.pillStatusDoneText}>
-                    ✅ Deposited ₹{activePigmy.todayCollectionAmount || 0} Today
-                  </Text>
-                </View>
+
+              {pigmyStatus.isPaid ? (
+                pigmyStatus.isSelf ? (
+                  <View style={styles.pillStatusDoneBox}>
+                    <Text style={styles.pillStatusDoneText}>
+                      ✅ Today Collection Collected
+                      {pigmyStatus.collectedAmount > 0
+                        ? ` (₹${pigmyStatus.collectedAmount})`
+                        : ""}
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.pillStatusColleagueBox}>
+                    <Text style={styles.pillStatusColleagueText}>
+                      👥 Collected by Colleague
+                    </Text>
+                  </View>
+                )
               ) : (
                 <TouchableOpacity
                   style={styles.pillActionBtnPigmy}
@@ -168,10 +210,24 @@ export const CustomerCard = React.memo(
             <Text style={styles.detailsBtnText}>Passbook</Text>
           </TouchableOpacity>
 
-          {allCollectedToday ? (
-            <View style={styles.collectBtnDisabled}>
-              <Text style={styles.collectBtnDisabledText}>
-                ✅ All Collected Today
+          {customerStatus.allCollected ? (
+            <View
+              style={[
+                styles.collectBtnDisabled,
+                customerStatus.isColleagueCollected &&
+                  styles.collectBtnColleagueDisabled,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.collectBtnDisabledText,
+                  customerStatus.isColleagueCollected &&
+                    styles.collectBtnColleagueDisabledText,
+                ]}
+              >
+                {customerStatus.isColleagueCollected
+                  ? `👥 Collected by Colleague`
+                  : "✅ Today Collection Collected"}
               </Text>
             </View>
           ) : (
@@ -183,8 +239,8 @@ export const CustomerCard = React.memo(
                 {loanPending && pigmyPending
                   ? "+ Collect Cash"
                   : loanPending
-                  ? "+ Collect Loan Cash"
-                  : "+ Collect Pigmy Cash"}
+                    ? "+ Collect Loan Cash"
+                    : "+ Collect Pigmy Cash"}
               </Text>
             </TouchableOpacity>
           )}
@@ -198,13 +254,18 @@ export const CustomerCard = React.memo(
       prev.item.customerName === next.item.customerName &&
       prev.item.mobile === next.item.mobile &&
       prev.item.address === next.item.address &&
+      prev.item.isPaid === next.item.isPaid &&
       prev.item.todayVisited === next.item.todayVisited &&
+      prev.item.todayCollected === next.item.todayCollected &&
+      prev.item.todayCollectionAmount === next.item.todayCollectionAmount &&
+      prev.item.collectedBy === next.item.collectedBy &&
+      prev.item.collectionManagerId === next.item.collectionManagerId &&
       prev.item.hasActiveLoan === next.item.hasActiveLoan &&
       prev.item.hasActivePigmy === next.item.hasActivePigmy &&
       prev.item.loans === next.item.loans &&
       prev.item.pigmyAccounts === next.item.pigmyAccounts
     );
-  }
+  },
 );
 
 const styles = StyleSheet.create({
@@ -322,6 +383,7 @@ const styles = StyleSheet.create({
   },
   pillTextWrap: {
     flex: 1,
+    paddingRight: 6,
   },
   pillLabel: {
     fontSize: 10,
@@ -349,6 +411,17 @@ const styles = StyleSheet.create({
   },
   pillStatusDoneText: {
     color: "#065f46",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  pillStatusColleagueBox: {
+    backgroundColor: "#dbeafe",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  pillStatusColleagueText: {
+    color: "#1e40af",
     fontSize: 11,
     fontWeight: "700",
   },
@@ -412,6 +485,15 @@ const styles = StyleSheet.create({
   },
   collectBtnDisabledText: {
     color: "#059669",
+    fontWeight: "700",
+    fontSize: 12,
+  },
+  collectBtnColleagueDisabled: {
+    backgroundColor: "#eff6ff",
+    borderColor: "#bfdbfe",
+  },
+  collectBtnColleagueDisabledText: {
+    color: "#1e40af",
     fontWeight: "700",
     fontSize: 12,
   },

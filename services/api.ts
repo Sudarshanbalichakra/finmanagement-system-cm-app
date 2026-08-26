@@ -268,6 +268,25 @@ export const MobileApi = {
     }>(`/pigmy-accounts/${pigmyId}/collections`);
     return response.data;
   },
+
+  /**
+   * 6. Get Daily Collections for Date (Cross-CM Sync)
+   * GET /daily-collections?date=YYYY-MM-DD
+   */
+  getDailyCollections: async (
+    date?: string,
+    signal?: AbortSignal,
+  ): Promise<any> => {
+    try {
+      const response = await apiClient.get("/daily-collections", {
+        params: date ? { date } : undefined,
+        signal,
+      });
+      return response.data;
+    } catch {
+      return null;
+    }
+  },
 };
 
 // Backwards compatibility alias for login

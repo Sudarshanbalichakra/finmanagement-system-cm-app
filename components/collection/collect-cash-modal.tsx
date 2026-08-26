@@ -13,6 +13,11 @@ import {
 import { ActivityIndicator, Text } from "react-native-paper";
 import { CustomerFeedItem } from "@/types/cm.types";
 import { MobileApi } from "@/services/api";
+import { useAuthStore } from "@/store/auth.store";
+import {
+  getLoanCollectionStatus,
+  getPigmyCollectionStatus,
+} from "@/utils/collection-status";
 import { getFriendlyErrorMessage } from "@/utils/error-handler";
 
 interface CollectCashModalProps {
@@ -34,6 +39,8 @@ export const CollectCashModal = React.memo(function CollectCashModal({
   initialLoanId,
   initialPigmyId,
 }: CollectCashModalProps) {
+  const currentCMId = useAuthStore((state) => state.user?.collectionManagerId);
+
   const [collectionType, setCollectionType] = useState<"LOAN" | "PIGMY">("LOAN");
   const [selectedLoanId, setSelectedLoanId] = useState<string>("");
   const [selectedPigmyId, setSelectedPigmyId] = useState<string>("");
@@ -50,39 +57,41 @@ export const CollectCashModal = React.memo(function CollectCashModal({
       setInlineError(null);
       setAmount("");
 
-      const activeLoans = (customer.loans || []).filter((l) => l.status === "ACTIVE" || !l.todayCollected);
       const allLoans = customer.loans || [];
-      const hasLoans = allLoans.length > 0;
-
-      const activePigmy = (customer.pigmyAccounts || []).filter((p) => p.status === "ACTIVE" || !p.todayCollected);
       const allPigmy = customer.pigmyAccounts || [];
-      const hasPigmy = allPigmy.length > 0;
+
+      const unpaidLoans = allLoans.filter(
+        (l) => !getLoanCollectionStatus(l, customer, currentCMId).isPaid
+      );
+      const unpaidPigmy = allPigmy.filter(
+        (p) => !getPigmyCollectionStatus(p, customer, currentCMId).isPaid
+      );
 
       if (initialType) {
         setCollectionType(initialType);
-      } else if (activeLoans.length > 0) {
+      } else if (unpaidLoans.length > 0) {
         setCollectionType("LOAN");
-      } else if (activePigmy.length > 0) {
+      } else if (unpaidPigmy.length > 0) {
         setCollectionType("PIGMY");
-      } else if (hasLoans) {
+      } else if (allLoans.length > 0) {
         setCollectionType("LOAN");
-      } else if (hasPigmy) {
+      } else if (allPigmy.length > 0) {
         setCollectionType("PIGMY");
       }
 
       if (initialLoanId) {
         setSelectedLoanId(initialLoanId);
       } else if (allLoans.length > 0) {
-        setSelectedLoanId(activeLoans[0]?.loanId || allLoans[0].loanId);
+        setSelectedLoanId(unpaidLoans[0]?.loanId || allLoans[0].loanId);
       }
 
       if (initialPigmyId) {
         setSelectedPigmyId(initialPigmyId);
       } else if (allPigmy.length > 0) {
-        setSelectedPigmyId(activePigmy[0]?.pigmyId || allPigmy[0].pigmyId);
+        setSelectedPigmyId(unpaidPigmy[0]?.pigmyId || allPigmy[0].pigmyId);
       }
     }
-  }, [customer, visible, initialType, initialLoanId, initialPigmyId]);
+  }, [customer, visible, initialType, initialLoanId, initialPigmyId, currentCMId]);
 
   if (!customer) return null;
 
@@ -95,16 +104,17 @@ export const CollectCashModal = React.memo(function CollectCashModal({
     activePigmyAccounts.find((p) => p.pigmyId === selectedPigmyId) ||
     activePigmyAccounts[0];
 
-  // Check if currently selected account is already collected today
-  const isCurrentAccountCollected =
-    collectionType === "LOAN"
-      ? Boolean(selectedLoan?.todayCollected)
-      : Boolean(selectedPigmy?.todayCollected);
+  // Evaluate current account status independently
+  const loanStatus = getLoanCollectionStatus(selectedLoan, customer, currentCMId);
+  const pigmyStatus = getPigmyCollectionStatus(selectedPigmy, customer, currentCMId);
 
-  const collectedTodayAmount =
-    collectionType === "LOAN"
-      ? selectedLoan?.todayCollectionAmount || 0
-      : selectedPigmy?.todayCollectionAmount || 0;
+  const currentAccountStatus =
+    collectionType === "LOAN" ? loanStatus : pigmyStatus;
+
+  const isCurrentAccountCollected = currentAccountStatus.isPaid;
+  const isCurrentAccountSelfCollected = currentAccountStatus.isSelf;
+  const currentAccountCollector = currentAccountStatus.collectorName;
+  const collectedTodayAmount = currentAccountStatus.collectedAmount;
 
   const handleAddAmount = (add: number) => {
     if (isCurrentAccountCollected) return;
@@ -241,18 +251,46 @@ export const CollectCashModal = React.memo(function CollectCashModal({
           >
             {/* View-Only Collected Banner */}
             {isCurrentAccountCollected ? (
-              <View style={styles.collectedBanner}>
+              <View
+                style={[
+                  styles.collectedBanner,
+                  !isCurrentAccountSelfCollected && styles.collectedBannerColleague,
+                ]}
+              >
                 <View style={styles.collectedBannerTop}>
-                  <Text style={styles.collectedBannerIcon}>✅</Text>
-                  <Text style={styles.collectedBannerTitle}>
-                    Daily Collection Completed
+                  <Text style={styles.collectedBannerIcon}>
+                    {isCurrentAccountSelfCollected ? "✅" : "👥"}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.collectedBannerTitle,
+                      !isCurrentAccountSelfCollected && styles.collectedBannerColleagueTitle,
+                    ]}
+                  >
+                    {isCurrentAccountSelfCollected
+                      ? "Today Collection Collected"
+                      : "Collected by Colleague"}
                   </Text>
                 </View>
-                <Text style={styles.collectedBannerAmount}>
-                  ₹{collectedTodayAmount.toLocaleString("en-IN")}
-                </Text>
-                <Text style={styles.collectedBannerSubtitle}>
-                  Recorded on {todayDateStr}. This transaction is locked and immutable.
+                {collectedTodayAmount > 0 ? (
+                  <Text
+                    style={[
+                      styles.collectedBannerAmount,
+                      !isCurrentAccountSelfCollected && styles.collectedBannerColleagueAmount,
+                    ]}
+                  >
+                    ₹{collectedTodayAmount.toLocaleString("en-IN")}
+                  </Text>
+                ) : null}
+                <Text
+                  style={[
+                    styles.collectedBannerSubtitle,
+                    !isCurrentAccountSelfCollected && styles.collectedBannerColleagueSubtitle,
+                  ]}
+                >
+                  {isCurrentAccountSelfCollected
+                    ? `Recorded by you for today (${todayDateStr}). This transaction is locked and immutable.`
+                    : `Recorded by colleague for today (${todayDateStr}). Duplicate entries are restricted.`}
                 </Text>
               </View>
             ) : null}
@@ -318,18 +356,21 @@ export const CollectCashModal = React.memo(function CollectCashModal({
               <View style={styles.accountCard}>
                 <View style={styles.cardHeaderRow}>
                   <Text style={styles.cardIdBadge}>Loan #{selectedLoan.loanId}</Text>
-                  <Text
-                    style={[
-                      styles.statusPill,
-                      selectedLoan.todayCollected
-                        ? styles.statusPillDone
-                        : styles.statusPillPending,
-                    ]}
-                  >
-                    {selectedLoan.todayCollected
-                      ? `✅ Collected ₹${selectedLoan.todayCollectionAmount || 0} Today`
-                      : "🔴 Pending Today"}
-                  </Text>
+                  {loanStatus.isPaid ? (
+                    loanStatus.isSelf ? (
+                      <Text style={[styles.statusPill, styles.statusPillDone]}>
+                        ✅ Today Collection Collected
+                      </Text>
+                    ) : (
+                      <Text style={[styles.statusPill, styles.statusPillColleague]}>
+                        👥 Collected by Colleague
+                      </Text>
+                    )
+                  ) : (
+                    <Text style={[styles.statusPill, styles.statusPillPending]}>
+                      🔴 Pending Today
+                    </Text>
+                  )}
                 </View>
 
                 {/* Multiple Loans Selector if > 1 */}
@@ -350,7 +391,7 @@ export const CollectCashModal = React.memo(function CollectCashModal({
                             selectedLoanId === l.loanId && styles.chipTextActive,
                           ]}
                         >
-                          {l.loanId} {l.todayCollected ? "✓" : ""}
+                          {l.loanId} {getLoanCollectionStatus(l, customer, currentCMId).isPaid ? "✓" : ""}
                         </Text>
                       </TouchableOpacity>
                     ))}
@@ -378,18 +419,21 @@ export const CollectCashModal = React.memo(function CollectCashModal({
               <View style={styles.accountCard}>
                 <View style={styles.cardHeaderRow}>
                   <Text style={styles.cardIdBadge}>Pigmy #{selectedPigmy.pigmyId}</Text>
-                  <Text
-                    style={[
-                      styles.statusPill,
-                      selectedPigmy.todayCollected
-                        ? styles.statusPillDone
-                        : styles.statusPillPendingPigmy,
-                    ]}
-                  >
-                    {selectedPigmy.todayCollected
-                      ? `✅ Deposited ₹${selectedPigmy.todayCollectionAmount || 0} Today`
-                      : "🟡 Pending Deposit"}
-                  </Text>
+                  {pigmyStatus.isPaid ? (
+                    pigmyStatus.isSelf ? (
+                      <Text style={[styles.statusPill, styles.statusPillDone]}>
+                        ✅ Today Collection Collected
+                      </Text>
+                    ) : (
+                      <Text style={[styles.statusPill, styles.statusPillColleague]}>
+                        👥 Collected by Colleague
+                      </Text>
+                    )
+                  ) : (
+                    <Text style={[styles.statusPill, styles.statusPillPendingPigmy]}>
+                      🟡 Pending Deposit
+                    </Text>
+                  )}
                 </View>
 
                 {/* Multiple Pigmy Accounts */}
@@ -410,7 +454,7 @@ export const CollectCashModal = React.memo(function CollectCashModal({
                             selectedPigmyId === p.pigmyId && styles.chipTextActive,
                           ]}
                         >
-                          {p.pigmyId} {p.todayCollected ? "✓" : ""}
+                          {p.pigmyId} {getPigmyCollectionStatus(p, customer, currentCMId).isPaid ? "✓" : ""}
                         </Text>
                       </TouchableOpacity>
                     ))}
@@ -532,9 +576,21 @@ export const CollectCashModal = React.memo(function CollectCashModal({
               </TouchableOpacity>
 
               {isCurrentAccountCollected ? (
-                <View style={styles.disabledCollectedBtn}>
-                  <Text style={styles.disabledCollectedBtnText}>
-                    ✅ Collected ₹{collectedTodayAmount} Today
+                <View
+                  style={[
+                    styles.disabledCollectedBtn,
+                    !isCurrentAccountSelfCollected && styles.disabledColleagueBtn,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.disabledCollectedBtnText,
+                      !isCurrentAccountSelfCollected && styles.disabledColleagueBtnText,
+                    ]}
+                  >
+                    {isCurrentAccountSelfCollected
+                      ? `✅ Today Collection Collected`
+                      : `👥 Collected by Colleague`}
                   </Text>
                 </View>
               ) : (
@@ -619,6 +675,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 16,
   },
+  collectedBannerColleague: {
+    backgroundColor: "#eff6ff",
+    borderColor: "#bfdbfe",
+  },
   collectedBannerTop: {
     flexDirection: "row",
     alignItems: "center",
@@ -634,17 +694,26 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
+  collectedBannerColleagueTitle: {
+    color: "#1e40af",
+  },
   collectedBannerAmount: {
     color: "#047857",
     fontSize: 28,
     fontWeight: "900",
     marginVertical: 4,
   },
+  collectedBannerColleagueAmount: {
+    color: "#1d4ed8",
+  },
   collectedBannerSubtitle: {
     color: "#059669",
     fontSize: 12,
     fontWeight: "600",
     textAlign: "center",
+  },
+  collectedBannerColleagueSubtitle: {
+    color: "#2563eb",
   },
   errorBanner: {
     backgroundColor: "#fef2f2",
@@ -723,6 +792,10 @@ const styles = StyleSheet.create({
   statusPillDone: {
     backgroundColor: "#d1fae5",
     color: "#065f46",
+  },
+  statusPillColleague: {
+    backgroundColor: "#dbeafe",
+    color: "#1e40af",
   },
   statusPillPending: {
     backgroundColor: "#fee2e2",
@@ -933,6 +1006,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     color: "#059669",
+  },
+  disabledColleagueBtn: {
+    backgroundColor: "#eff6ff",
+    borderColor: "#bfdbfe",
+  },
+  disabledColleagueBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#1e40af",
   },
   disabledBtn: {
     opacity: 0.6,

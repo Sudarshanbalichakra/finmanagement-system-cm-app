@@ -18,6 +18,11 @@ import {
   PigmyLedgerItem,
 } from "@/types/cm.types";
 import { MobileApi } from "@/services/api";
+import { useAuthStore } from "@/store/auth.store";
+import {
+  getLoanCollectionStatus,
+  getPigmyCollectionStatus,
+} from "@/utils/collection-status";
 import { getFriendlyErrorMessage } from "@/utils/error-handler";
 
 interface CustomerDetailsModalProps {
@@ -37,6 +42,7 @@ export function CustomerDetailsModal({
   onClose,
   onOpenCollect,
 }: CustomerDetailsModalProps) {
+  const currentCMId = useAuthStore((state) => state.user?.collectionManagerId);
   const [activeTab, setActiveTab] = useState<"LOANS" | "PIGMY" | "INFO">("LOANS");
   const [loanLedgers, setLoanLedgers] = useState<{
     [loanId: string]: { loading: boolean; items: LoanLedgerItem[]; error?: string };
@@ -226,13 +232,32 @@ export function CustomerDetailsModal({
                           <Text style={styles.cardId}>Loan #{loan.loanId}</Text>
                           <Text style={styles.cardStatus}>{loan.status}</Text>
                         </View>
-                        {loan.todayCollected ? (
-                          <View style={styles.collectMiniButtonDisabled}>
-                            <Text style={styles.collectMiniTextDisabled}>
-                              ✅ Paid (₹{loan.todayCollectionAmount || 0})
-                            </Text>
-                          </View>
-                        ) : (
+                      {(() => {
+                        const status = getLoanCollectionStatus(loan, customer, currentCMId);
+
+                        if (status.isPaid) {
+                          return (
+                            <View
+                              style={[
+                                styles.collectMiniButtonDisabled,
+                                !status.isSelf && styles.collectMiniButtonColleague,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.collectMiniTextDisabled,
+                                  !status.isSelf && styles.collectMiniTextColleague,
+                                ]}
+                              >
+                                {status.isSelf
+                                  ? `✅ Paid (₹${status.collectedAmount || loan.todayCollectionAmount || 0})`
+                                  : `👥 Collected by Colleague`}
+                              </Text>
+                            </View>
+                          );
+                        }
+
+                        return (
                           <TouchableOpacity
                             style={styles.collectMiniButton}
                             onPress={() =>
@@ -241,8 +266,9 @@ export function CustomerDetailsModal({
                           >
                             <Text style={styles.collectMiniText}>+ Collect</Text>
                           </TouchableOpacity>
-                        )}
-                      </View>
+                        );
+                      })()}
+                    </View>
 
                       {/* Loan Figures (Directly from API) */}
                       <View style={styles.figuresGrid}>
@@ -352,13 +378,32 @@ export function CustomerDetailsModal({
                             {pigmy.schemeName || "Daily Savings"}
                           </Text>
                         </View>
-                        {pigmy.todayCollected ? (
-                          <View style={styles.collectMiniButtonDisabled}>
-                            <Text style={styles.collectMiniTextDisabled}>
-                              ✅ Deposited (₹{pigmy.todayCollectionAmount || 0})
-                            </Text>
-                          </View>
-                        ) : (
+                      {(() => {
+                        const status = getPigmyCollectionStatus(pigmy, customer, currentCMId);
+
+                        if (status.isPaid) {
+                          return (
+                            <View
+                              style={[
+                                styles.collectMiniButtonDisabled,
+                                !status.isSelf && styles.collectMiniButtonColleague,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.collectMiniTextDisabled,
+                                  !status.isSelf && styles.collectMiniTextColleague,
+                                ]}
+                              >
+                                {status.isSelf
+                                  ? `✅ Deposited (₹${status.collectedAmount || pigmy.todayCollectionAmount || 0})`
+                                  : `👥 Collected by Colleague`}
+                              </Text>
+                            </View>
+                          );
+                        }
+
+                        return (
                           <TouchableOpacity
                             style={styles.collectMiniButton}
                             onPress={() =>
@@ -367,8 +412,9 @@ export function CustomerDetailsModal({
                           >
                             <Text style={styles.collectMiniText}>+ Deposit</Text>
                           </TouchableOpacity>
-                        )}
-                      </View>
+                        );
+                      })()}
+                    </View>
 
                       {/* Pigmy Figures */}
                       <View style={styles.figuresGrid}>
@@ -684,6 +730,15 @@ const styles = StyleSheet.create({
   },
   collectMiniTextDisabled: {
     color: "#059669",
+    fontWeight: "700",
+    fontSize: 12,
+  },
+  collectMiniButtonColleague: {
+    backgroundColor: "#eff6ff",
+    borderColor: "#bfdbfe",
+  },
+  collectMiniTextColleague: {
+    color: "#1e40af",
     fontWeight: "700",
     fontSize: 12,
   },

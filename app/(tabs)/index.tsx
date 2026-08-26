@@ -29,12 +29,15 @@ import {
   MobileFeedData,
   MobileFeedStats,
 } from "@/types/cm.types";
+import { getCustomerVisitedStatus } from "@/utils/collection-status";
 import { getFriendlyErrorMessage } from "@/utils/error-handler";
 
 type FilterType = "ALL" | "PENDING" | "VISITED" | "LOANS" | "PIGMY";
 
 export default function HomeScreen() {
   const user = useAuthStore((state) => state.user);
+  const currentCMId = user?.collectionManagerId;
+
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split("T")[0],
   );
@@ -70,13 +73,131 @@ export default function HomeScreen() {
       setErrorMessage(null);
 
       try {
-        const response = await MobileApi.getMobileFeed(selectedDate);
-        if (response.success && response.data) {
-          setFeedData(response.data);
+        const [feedRes, collectionsRes] = await Promise.allSettled([
+          MobileApi.getMobileFeed(selectedDate),
+          MobileApi.getDailyCollections(selectedDate),
+        ]);
+
+        if (
+          feedRes.status === "fulfilled" &&
+          feedRes.value.success &&
+          feedRes.value.data
+        ) {
+          let feed = feedRes.value.data;
+
+          // Extract daily collections if available
+          let rawCollections: any[] = [];
+          if (collectionsRes.status === "fulfilled" && collectionsRes.value) {
+            const val = collectionsRes.value;
+            if (Array.isArray(val)) {
+              rawCollections = val;
+            } else if (Array.isArray(val.data)) {
+              rawCollections = val.data;
+            } else if (Array.isArray(val.collections)) {
+              rawCollections = val.collections;
+            }
+          }
+
+          if (rawCollections.length > 0 && feed.customers) {
+            const updatedCustomers = feed.customers.map((cust) => {
+              const matchedCollections = rawCollections.filter(
+                (c) =>
+                  (c.customerId &&
+                    String(c.customerId).trim() ===
+                      String(cust.customerId).trim()) ||
+                  cust.loans?.some(
+                    (l) =>
+                      c.loanId &&
+                      String(l.loanId).trim() === String(c.loanId).trim()
+                  ) ||
+                  cust.pigmyAccounts?.some(
+                    (p) =>
+                      c.pigmyId &&
+                      String(p.pigmyId).trim() === String(c.pigmyId).trim()
+                  )
+              );
+
+              if (matchedCollections.length === 0) return cust;
+
+              const updatedLoans = (cust.loans || []).map((l) => {
+                const matched = matchedCollections.find(
+                  (c) =>
+                    c.loanId &&
+                    String(c.loanId).trim() === String(l.loanId).trim()
+                );
+                if (matched) {
+                  return {
+                    ...l,
+                    isPaid: true,
+                    todayCollected: true,
+                    todayCollectionAmount:
+                      matched.amount || l.todayCollectionAmount || 0,
+                    collectedBy:
+                      matched.collectionManagerId ||
+                      matched.collectedBy ||
+                      l.collectedBy,
+                    collectionManagerId:
+                      matched.collectionManagerId || l.collectionManagerId,
+                  };
+                }
+                return l;
+              });
+
+              const updatedPigmy = (cust.pigmyAccounts || []).map((p) => {
+                const matched = matchedCollections.find(
+                  (c) =>
+                    c.pigmyId &&
+                    String(c.pigmyId).trim() === String(p.pigmyId).trim()
+                );
+                if (matched) {
+                  return {
+                    ...p,
+                    isPaid: true,
+                    todayCollected: true,
+                    todayCollectionAmount:
+                      matched.amount || p.todayCollectionAmount || 0,
+                    collectedBy:
+                      matched.collectionManagerId ||
+                      matched.collectedBy ||
+                      p.collectedBy,
+                    collectionManagerId:
+                      matched.collectionManagerId || p.collectionManagerId,
+                  };
+                }
+                return p;
+              });
+
+              const primaryMatch = matchedCollections[0];
+
+              return {
+                ...cust,
+                isPaid: true,
+                todayVisited: true,
+                todayCollected: true,
+                collectedBy:
+                  primaryMatch.collectionManagerId ||
+                  primaryMatch.collectedBy ||
+                  cust.collectedBy,
+                collectionManagerId:
+                  primaryMatch.collectionManagerId || cust.collectionManagerId,
+                loans: updatedLoans,
+                pigmyAccounts: updatedPigmy,
+              };
+            });
+
+            feed = {
+              ...feed,
+              customers: updatedCustomers,
+            };
+          }
+
+          setFeedData(feed);
         } else {
           setErrorMessage(
             getFriendlyErrorMessage(
-              response.message,
+              feedRes.status === "fulfilled"
+                ? feedRes.value.message
+                : (feedRes as any).reason,
               "Unable to load today's collection route. Please try again."
             )
           );
@@ -92,7 +213,7 @@ export default function HomeScreen() {
         setRefreshing(false);
       }
     },
-    [selectedDate],
+    [selectedDate]
   );
 
   useEffect(() => {
@@ -145,7 +266,7 @@ export default function HomeScreen() {
     [handleOpenCollect],
   );
 
-  // High-performance memoized filter list
+  // High-performance memoized filter list using getCustomerVisitedStatus
   const filteredCustomers = useMemo(() => {
     const rawList = feedData?.customers;
     if (!rawList || rawList.length === 0) return [];
@@ -163,12 +284,14 @@ export default function HomeScreen() {
         if (!matches) return false;
       }
 
+      const status = getCustomerVisitedStatus(c, currentCMId);
+
       // Filter category match
       if (activeFilter === "PENDING") {
-        return !c.todayVisited;
+        return !status.isVisited;
       }
       if (activeFilter === "VISITED") {
-        return c.todayVisited;
+        return status.isVisited;
       }
       if (activeFilter === "LOANS") {
         return c.hasActiveLoan || (c.loans && c.loans.length > 0);
@@ -180,7 +303,7 @@ export default function HomeScreen() {
       }
       return true;
     });
-  }, [feedData?.customers, deferredSearchQuery, activeFilter]);
+  }, [feedData?.customers, deferredSearchQuery, activeFilter, currentCMId]);
 
   const stats: MobileFeedStats = useMemo(() => {
     return (
@@ -195,6 +318,15 @@ export default function HomeScreen() {
       }
     );
   }, [feedData?.stats]);
+
+  // Compute dynamic visited count across all CMs
+  const effectiveVisitedCount = useMemo(() => {
+    if (!feedData?.customers) return stats.visitedCustomersToday || 0;
+    const visitedCount = feedData.customers.filter((c) =>
+      getCustomerVisitedStatus(c, currentCMId).isVisited
+    ).length;
+    return Math.max(stats.visitedCustomersToday || 0, visitedCount);
+  }, [feedData?.customers, stats.visitedCustomersToday, currentCMId]);
 
   const keyExtractor = useCallback(
     (item: CustomerFeedItem) => item.customerId,
@@ -258,7 +390,7 @@ export default function HomeScreen() {
           <View style={styles.subKpiRow}>
             <View style={styles.subKpiItem}>
               <Text style={styles.subKpiVal}>
-                {stats.visitedCustomersToday} / {stats.totalCustomers}
+                {effectiveVisitedCount} / {stats.totalCustomers || feedData?.customers?.length || 0}
               </Text>
               <Text style={styles.subKpiLabel}>Visited</Text>
             </View>

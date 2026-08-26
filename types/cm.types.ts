@@ -14,8 +14,11 @@ export interface LoanItem {
   startDate?: string;
   endDate?: string;
   status: "ACTIVE" | "COMPLETED" | "DEFAULTED" | string;
+  isPaid?: boolean;
   todayCollected?: boolean;
   todayCollectionAmount?: number;
+  collectedBy?: string;
+  collectionManagerId?: string;
 }
 
 export interface PigmyAccountItem {
@@ -28,8 +31,11 @@ export interface PigmyAccountItem {
   maturityDate?: string;
   totalSavedAmount: number;
   status: "ACTIVE" | "MATURED" | "CLOSED" | string;
+  isPaid?: boolean;
   todayCollected?: boolean;
   todayCollectionAmount?: number;
+  collectedBy?: string;
+  collectionManagerId?: string;
 }
 
 export interface CustomerFeedItem {
@@ -43,7 +49,12 @@ export interface CustomerFeedItem {
   nominee?: NomineeInfo;
   hasActiveLoan?: boolean;
   hasActivePigmy?: boolean;
+  isPaid?: boolean;
   todayVisited?: boolean;
+  todayCollected?: boolean;
+  todayCollectionAmount?: number;
+  collectedBy?: string;
+  collectionManagerId?: string;
   loans: LoanItem[];
   pigmyAccounts: PigmyAccountItem[];
 }
@@ -86,6 +97,7 @@ export interface LoanCollectionResult {
   collectionManagerId: string;
   amount: number;
   collectionDate: string;
+  isPaid?: boolean;
   approvalStatus?: string;
 }
 
@@ -104,6 +116,7 @@ export interface PigmyCollectionResult {
   amount: number;
   collectionDate: string;
   totalSavedAmount: number;
+  isPaid?: boolean;
 }
 
 export interface DailySummaryCM {
