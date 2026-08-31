@@ -5,6 +5,7 @@ import {
   LoanCollectionResult,
   LoanLedgerItem,
   MobileFeedResponse,
+  MyDayCloseSummaryResponse,
   PigmyCollectionResult,
   PigmyLedgerItem,
   RecordLoanCollectionPayload,
@@ -210,15 +211,32 @@ export const MobileApi = {
   },
 
   /**
-   * 4. Get CM Daily Summary & Stats
-   * GET /daily-collections/summary?date=YYYY-MM-DD
+   * 4. Get CM Daily Day Close Summary & Stats
+   * GET /daily-collections/my-summary?date=YYYY-MM-DD
+   */
+  getMyDayCloseSummary: async (
+    date?: string,
+    signal?: AbortSignal,
+  ): Promise<MyDayCloseSummaryResponse> => {
+    const response = await apiClient.get<MyDayCloseSummaryResponse>(
+      "/daily-collections/my-summary",
+      {
+        params: date ? { date } : undefined,
+        signal,
+      },
+    );
+    return response.data;
+  },
+
+  /**
+   * Backwards-compatible alias for summary
    */
   getDailySummary: async (
     date?: string,
     signal?: AbortSignal,
   ): Promise<DailySummaryResponse> => {
     const response = await apiClient.get<DailySummaryResponse>(
-      "/daily-collections/summary",
+      "/daily-collections/my-summary",
       {
         params: date ? { date } : undefined,
         signal,
@@ -270,7 +288,7 @@ export const MobileApi = {
   },
 
   /**
-   * 6. Get Daily Collections for Date (Cross-CM Sync)
+   * 6. Get Daily Loan Collections for Date (Cross-CM Sync)
    * GET /daily-collections?date=YYYY-MM-DD
    */
   getDailyCollections: async (
@@ -284,6 +302,44 @@ export const MobileApi = {
       });
       return response.data;
     } catch {
+      return null;
+    }
+  },
+
+  /**
+   * 7. Get Daily Pigmy Collections for Date (Cross-CM Sync)
+   * GET /pigmy-collections?date=YYYY-MM-DD (with fallbacks)
+   */
+  getDailyPigmyCollections: async (
+    date?: string,
+    signal?: AbortSignal,
+  ): Promise<any> => {
+    try {
+      const response = await apiClient.get("/pigmy-collections", {
+        params: date ? { date } : undefined,
+        signal,
+      });
+      return response.data;
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        try {
+          const res2 = await apiClient.get("/daily-collections/pigmy", {
+            params: date ? { date } : undefined,
+            signal,
+          });
+          return res2.data;
+        } catch {
+          try {
+            const res3 = await apiClient.get("/pigmy-accounts/collections", {
+              params: date ? { date } : undefined,
+              signal,
+            });
+            return res3.data;
+          } catch {
+            return null;
+          }
+        }
+      }
       return null;
     }
   },

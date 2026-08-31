@@ -82,7 +82,7 @@ export const CustomerCard = React.memo(
             <View style={styles.nameRow}>
               <Text
                 variant="titleMedium"
-                style={styles.customerName}
+                style={[styles.customerName, { textTransform: "capitalize" }]}
                 numberOfLines={1}
               >
                 {item.customerName}
@@ -99,7 +99,6 @@ export const CustomerCard = React.memo(
             </View>
 
             <View style={styles.subInfoRow}>
-              <Text style={styles.customerIdText}>{item.customerId}</Text>
               {item.mobile ? (
                 <TouchableOpacity
                   onPress={() => onCall(item.mobile)}

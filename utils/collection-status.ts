@@ -14,7 +14,7 @@ export interface AccountCollectionStatus {
 export function getLoanCollectionStatus(
   loan: LoanItem | null | undefined,
   customer?: CustomerFeedItem | null,
-  currentCMId?: string
+  currentCMId?: string,
 ): AccountCollectionStatus {
   if (!loan) {
     return {
@@ -31,13 +31,15 @@ export function getLoanCollectionStatus(
     loan.isPaid === ("true" as any) ||
     loan.todayCollected === true ||
     loan.todayCollected === ("true" as any) ||
-    (typeof loan.todayCollectionAmount === "number" && loan.todayCollectionAmount > 0)
+    (typeof loan.todayCollectionAmount === "number" &&
+      loan.todayCollectionAmount > 0),
   );
 
   const collectedAmount =
-    (typeof loan.todayCollectionAmount === "number" && loan.todayCollectionAmount > 0
+    typeof loan.todayCollectionAmount === "number" &&
+    loan.todayCollectionAmount > 0
       ? loan.todayCollectionAmount
-      : 0);
+      : 0;
 
   const rawCollector = loan.collectedBy || loan.collectionManagerId;
 
@@ -45,7 +47,8 @@ export function getLoanCollectionStatus(
     isPaid &&
     rawCollector &&
     currentCMId &&
-    String(rawCollector).trim().toLowerCase() === String(currentCMId).trim().toLowerCase()
+    String(rawCollector).trim().toLowerCase() ===
+      String(currentCMId).trim().toLowerCase(),
   );
 
   const collectorName = rawCollector ? String(rawCollector) : "Colleague";
@@ -60,7 +63,7 @@ export function getLoanCollectionStatus(
 export function getPigmyCollectionStatus(
   pigmy: PigmyAccountItem | null | undefined,
   customer?: CustomerFeedItem | null,
-  currentCMId?: string
+  currentCMId?: string,
 ): AccountCollectionStatus {
   if (!pigmy) {
     return {
@@ -77,13 +80,15 @@ export function getPigmyCollectionStatus(
     pigmy.isPaid === ("true" as any) ||
     pigmy.todayCollected === true ||
     pigmy.todayCollected === ("true" as any) ||
-    (typeof pigmy.todayCollectionAmount === "number" && pigmy.todayCollectionAmount > 0)
+    (typeof pigmy.todayCollectionAmount === "number" &&
+      pigmy.todayCollectionAmount > 0),
   );
 
   const collectedAmount =
-    (typeof pigmy.todayCollectionAmount === "number" && pigmy.todayCollectionAmount > 0
+    typeof pigmy.todayCollectionAmount === "number" &&
+    pigmy.todayCollectionAmount > 0
       ? pigmy.todayCollectionAmount
-      : 0);
+      : 0;
 
   const rawCollector = pigmy.collectedBy || pigmy.collectionManagerId;
 
@@ -91,7 +96,8 @@ export function getPigmyCollectionStatus(
     isPaid &&
     rawCollector &&
     currentCMId &&
-    String(rawCollector).trim().toLowerCase() === String(currentCMId).trim().toLowerCase()
+    String(rawCollector).trim().toLowerCase() ===
+      String(currentCMId).trim().toLowerCase(),
   );
 
   const collectorName = rawCollector ? String(rawCollector) : "Colleague";
@@ -104,7 +110,7 @@ export function getPigmyCollectionStatus(
  */
 export function getCustomerVisitedStatus(
   customer: CustomerFeedItem | null | undefined,
-  currentCMId?: string
+  currentCMId?: string,
 ): {
   isVisited: boolean;
   allCollected: boolean;
@@ -121,13 +127,15 @@ export function getCustomerVisitedStatus(
   }
 
   const hasLoans = Boolean(customer.loans && customer.loans.length > 0);
-  const hasPigmy = Boolean(customer.pigmyAccounts && customer.pigmyAccounts.length > 0);
+  const hasPigmy = Boolean(
+    customer.pigmyAccounts && customer.pigmyAccounts.length > 0,
+  );
 
   const loanStatuses = (customer.loans || []).map((l) =>
-    getLoanCollectionStatus(l, customer, currentCMId)
+    getLoanCollectionStatus(l, customer, currentCMId),
   );
   const pigmyStatuses = (customer.pigmyAccounts || []).map((p) =>
-    getPigmyCollectionStatus(p, customer, currentCMId)
+    getPigmyCollectionStatus(p, customer, currentCMId),
   );
 
   const anyLoanPaid = loanStatuses.some((s) => s.isPaid);
@@ -144,17 +152,19 @@ export function getCustomerVisitedStatus(
     isDirectlyVisited ||
     anyLoanPaid ||
     anyPigmyPaid ||
-    customer.isPaid === true
+    customer.isPaid === true,
   );
 
   // All collected ONLY when all active loans AND all active pigmy accounts are paid
   const allCollected = Boolean(
-    (hasLoans || hasPigmy)
-      ? (allLoansPaid && allPigmyPaid)
-      : (isDirectlyVisited || customer.isPaid === true)
+    hasLoans || hasPigmy
+      ? allLoansPaid && allPigmyPaid
+      : isDirectlyVisited || customer.isPaid === true,
   );
 
-  const allPaidStatuses = [...loanStatuses, ...pigmyStatuses].filter((s) => s.isPaid);
+  const allPaidStatuses = [...loanStatuses, ...pigmyStatuses].filter(
+    (s) => s.isPaid,
+  );
   const hasAnyColleague =
     allPaidStatuses.some((s) => !s.isSelf) ||
     (allCollected &&

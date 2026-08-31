@@ -25,9 +25,7 @@ const loginSchema = z.object({
     .string()
     .trim()
     .min(1, "Collection Manager ID is required"),
-  password: z
-    .string()
-    .min(1, "Password is required"),
+  password: z.string().min(1, "Password is required"),
 });
 
 type LoginFormValues = z.infer<typeof loginSchema>;
@@ -71,7 +69,7 @@ export default function CMLoginScreen() {
     } catch (error: any) {
       const friendlyMsg = getFriendlyErrorMessage(
         error,
-        "Invalid Collection Manager ID or password."
+        "Invalid Collection Manager ID or password.",
       );
       setErrorMessage(friendlyMsg);
     } finally {

@@ -12,7 +12,6 @@ import { Text } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAuthStore } from "@/store/auth.store";
-import { PrimaryButton } from "@/components/forms/primary-button";
 
 export default function ProfileScreen() {
   const user = useAuthStore((state) => state.user);
@@ -47,7 +46,10 @@ export default function ProfileScreen() {
                 .toUpperCase()}
             </Text>
           </View>
-          <Text variant="titleLarge" style={styles.userName}>
+          <Text
+            variant="titleLarge"
+            style={[styles.userName, { textTransform: "capitalize" }]}
+          >
             {user?.name || "Collection Manager"}
           </Text>
           <Text style={styles.userRoleBadge}>
@@ -65,13 +67,11 @@ export default function ProfileScreen() {
               {user?.collectionManagerId || "N/A"}
             </Text>
           </View>
-
+          {/* 
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Assigned Client ID</Text>
-            <Text style={styles.infoValueBold}>
-              {user?.clientId || "N/A"}
-            </Text>
-          </View>
+            <Text style={styles.infoValueBold}>{user?.clientId || "N/A"}</Text>
+          </View> */}
 
           {user?.mobile ? (
             <View style={styles.infoRow}>
@@ -88,30 +88,10 @@ export default function ProfileScreen() {
           ) : null}
         </View>
 
-        {/* Security & System Info */}
-        <View style={styles.infoCard}>
-          <Text style={styles.cardSectionTitle}>Security & Workspace</Text>
-
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Session Authentication</Text>
-            <Text style={styles.infoValueGreen}>🔒 JWT Encrypted</Text>
-          </View>
-
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Tenant Isolation</Text>
-            <Text style={styles.infoValue}>Auto-Scoped to Client</Text>
-          </View>
-
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>App Version</Text>
-            <Text style={styles.infoValue}>1.0.0 (Expo SDK 54)</Text>
-          </View>
-        </View>
-
         {/* Logout Button */}
         <View style={styles.logoutContainer}>
           <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-            <Text style={styles.logoutBtnText}>Sign Out from Workspace</Text>
+            <Text style={styles.logoutBtnText}>Log Out from Workspace</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

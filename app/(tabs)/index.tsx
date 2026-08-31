@@ -1,3 +1,5 @@
+import { useFocusEffect } from "expo-router";
+import * as Network from "expo-network";
 import React, {
   useCallback,
   useDeferredValue,
@@ -20,6 +22,7 @@ import { Text } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { CollectCashModal } from "@/components/collection/collect-cash-modal";
+import { OfflineFallback } from "@/components/common/offline-fallback";
 import { CustomerCard } from "@/components/customer/customer-card";
 import { CustomerDetailsModal } from "@/components/customer/customer-details-modal";
 import { MobileApi } from "@/services/api";
@@ -31,6 +34,7 @@ import {
 } from "@/types/cm.types";
 import { getCustomerVisitedStatus } from "@/utils/collection-status";
 import { getFriendlyErrorMessage } from "@/utils/error-handler";
+import { checkNetworkConnectivity } from "@/utils/network";
 
 type FilterType = "ALL" | "PENDING" | "VISITED" | "LOANS" | "PIGMY";
 
@@ -44,6 +48,7 @@ export default function HomeScreen() {
   const [feedData, setFeedData] = useState<MobileFeedData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Search & Filter state
@@ -72,11 +77,23 @@ export default function HomeScreen() {
       }
       setErrorMessage(null);
 
+      // 1. Pre-flight Internet & Wi-Fi Check
+      const netStatus = await checkNetworkConnectivity();
+      if (!netStatus.isOnline) {
+        setIsOffline(true);
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
+      setIsOffline(false);
+
       try {
-        const [feedRes, collectionsRes] = await Promise.allSettled([
-          MobileApi.getMobileFeed(selectedDate),
-          MobileApi.getDailyCollections(selectedDate),
-        ]);
+        const [feedRes, loanCollectionsRes, pigmyCollectionsRes] =
+          await Promise.allSettled([
+            MobileApi.getMobileFeed(selectedDate),
+            MobileApi.getDailyCollections(selectedDate),
+            MobileApi.getDailyPigmyCollections(selectedDate),
+          ]);
 
         if (
           feedRes.status === "fulfilled" &&
@@ -85,101 +102,128 @@ export default function HomeScreen() {
         ) {
           let feed = feedRes.value.data;
 
-          // Extract daily collections if available
-          let rawCollections: any[] = [];
-          if (collectionsRes.status === "fulfilled" && collectionsRes.value) {
-            const val = collectionsRes.value;
+          // Extract daily loan collections if available
+          let rawLoanCollections: any[] = [];
+          if (
+            loanCollectionsRes.status === "fulfilled" &&
+            loanCollectionsRes.value
+          ) {
+            const val = loanCollectionsRes.value;
             if (Array.isArray(val)) {
-              rawCollections = val;
+              rawLoanCollections = val;
             } else if (Array.isArray(val.data)) {
-              rawCollections = val.data;
+              rawLoanCollections = val.data;
             } else if (Array.isArray(val.collections)) {
-              rawCollections = val.collections;
+              rawLoanCollections = val.collections;
+            } else if (Array.isArray(val.dailyCollections)) {
+              rawLoanCollections = val.dailyCollections;
             }
           }
 
-          if (rawCollections.length > 0 && feed.customers) {
+          // Extract daily pigmy collections if available
+          let rawPigmyCollections: any[] = [];
+          if (
+            pigmyCollectionsRes.status === "fulfilled" &&
+            pigmyCollectionsRes.value
+          ) {
+            const val = pigmyCollectionsRes.value;
+            if (Array.isArray(val)) {
+              rawPigmyCollections = val;
+            } else if (Array.isArray(val.data)) {
+              rawPigmyCollections = val.data;
+            } else if (Array.isArray(val.collections)) {
+              rawPigmyCollections = val.collections;
+            } else if (Array.isArray(val.pigmyCollections)) {
+              rawPigmyCollections = val.pigmyCollections;
+            }
+          }
+
+          const hasCollections =
+            rawLoanCollections.length > 0 || rawPigmyCollections.length > 0;
+
+          if (hasCollections && feed.customers) {
             const updatedCustomers = feed.customers.map((cust) => {
-              const matchedCollections = rawCollections.filter(
-                (c) =>
-                  (c.customerId &&
-                    String(c.customerId).trim() ===
-                      String(cust.customerId).trim()) ||
-                  cust.loans?.some(
-                    (l) =>
-                      c.loanId &&
-                      String(l.loanId).trim() === String(c.loanId).trim()
-                  ) ||
-                  cust.pigmyAccounts?.some(
-                    (p) =>
-                      c.pigmyId &&
-                      String(p.pigmyId).trim() === String(c.pigmyId).trim()
-                  )
-              );
-
-              if (matchedCollections.length === 0) return cust;
-
+              // Loan Matching
               const updatedLoans = (cust.loans || []).map((l) => {
-                const matched = matchedCollections.find(
-                  (c) =>
-                    c.loanId &&
-                    String(c.loanId).trim() === String(l.loanId).trim()
-                );
-                if (matched) {
+                const matchedLoan =
+                  rawLoanCollections.find(
+                    (c) =>
+                      c.loanId &&
+                      String(c.loanId).trim() === String(l.loanId).trim(),
+                  ) ||
+                  rawLoanCollections.find(
+                    (c) =>
+                      !c.pigmyId &&
+                      c.customerId &&
+                      String(c.customerId).trim() ===
+                        String(cust.customerId).trim(),
+                  );
+
+                if (matchedLoan) {
                   return {
                     ...l,
                     isPaid: true,
                     todayCollected: true,
                     todayCollectionAmount:
-                      matched.amount || l.todayCollectionAmount || 0,
+                      matchedLoan.amount || l.todayCollectionAmount || 0,
                     collectedBy:
-                      matched.collectionManagerId ||
-                      matched.collectedBy ||
+                      matchedLoan.collectionManagerId ||
+                      matchedLoan.collectedBy ||
                       l.collectedBy,
                     collectionManagerId:
-                      matched.collectionManagerId || l.collectionManagerId,
+                      matchedLoan.collectionManagerId || l.collectionManagerId,
                   };
                 }
                 return l;
               });
 
+              // Pigmy Matching
               const updatedPigmy = (cust.pigmyAccounts || []).map((p) => {
-                const matched = matchedCollections.find(
-                  (c) =>
-                    c.pigmyId &&
-                    String(c.pigmyId).trim() === String(p.pigmyId).trim()
-                );
-                if (matched) {
+                const matchedPigmy =
+                  rawPigmyCollections.find(
+                    (c) =>
+                      c.pigmyId &&
+                      String(c.pigmyId).trim() === String(p.pigmyId).trim(),
+                  ) ||
+                  rawPigmyCollections.find(
+                    (c) =>
+                      c.customerId &&
+                      String(c.customerId).trim() ===
+                        String(cust.customerId).trim(),
+                  );
+
+                if (matchedPigmy) {
                   return {
                     ...p,
                     isPaid: true,
                     todayCollected: true,
                     todayCollectionAmount:
-                      matched.amount || p.todayCollectionAmount || 0,
+                      matchedPigmy.amount || p.todayCollectionAmount || 0,
                     collectedBy:
-                      matched.collectionManagerId ||
-                      matched.collectedBy ||
+                      matchedPigmy.collectionManagerId ||
+                      matchedPigmy.collectedBy ||
                       p.collectedBy,
                     collectionManagerId:
-                      matched.collectionManagerId || p.collectionManagerId,
+                      matchedPigmy.collectionManagerId || p.collectionManagerId,
                   };
                 }
                 return p;
               });
 
-              const primaryMatch = matchedCollections[0];
+              const isAnyLoanPaid = updatedLoans.some(
+                (l) => l.isPaid || l.todayCollected,
+              );
+              const isAnyPigmyPaid = updatedPigmy.some(
+                (p) => p.isPaid || p.todayCollected,
+              );
+              const isCustomerPaid =
+                isAnyLoanPaid || isAnyPigmyPaid || cust.todayVisited || cust.isPaid;
 
               return {
                 ...cust,
-                isPaid: true,
-                todayVisited: true,
-                todayCollected: true,
-                collectedBy:
-                  primaryMatch.collectionManagerId ||
-                  primaryMatch.collectedBy ||
-                  cust.collectedBy,
-                collectionManagerId:
-                  primaryMatch.collectionManagerId || cust.collectionManagerId,
+                isPaid: isCustomerPaid,
+                todayVisited: isCustomerPaid,
+                todayCollected: isCustomerPaid,
                 loans: updatedLoans,
                 pigmyAccounts: updatedPigmy,
               };
@@ -198,14 +242,21 @@ export default function HomeScreen() {
               feedRes.status === "fulfilled"
                 ? feedRes.value.message
                 : (feedRes as any).reason,
-              "Unable to load today's collection route. Please try again."
-            )
+              "Unable to load today's collection route. Please try again.",
+            ),
           );
         }
       } catch (err: any) {
+        // If network error occurred
+        if (err.message === "Network Error" || !err.response) {
+          const recheck = await checkNetworkConnectivity();
+          if (!recheck.isOnline) {
+            setIsOffline(true);
+          }
+        }
         const msg = getFriendlyErrorMessage(
           err,
-          "Unable to load today's collection route. Please try again."
+          "Unable to load today's collection route. Please try again.",
         );
         setErrorMessage(msg);
       } finally {
@@ -213,11 +264,39 @@ export default function HomeScreen() {
         setRefreshing(false);
       }
     },
-    [selectedDate]
+    [selectedDate],
   );
 
+  // Auto-refresh every time this tab is focused/switched to
+  useFocusEffect(
+    useCallback(() => {
+      fetchFeed();
+    }, [fetchFeed]),
+  );
+
+  // Auto-detect when network reconnects in real-time
   useEffect(() => {
-    fetchFeed();
+    let subscription: any = null;
+    try {
+      if (typeof Network.addNetworkStateListener === "function") {
+        subscription = Network.addNetworkStateListener((state) => {
+          const isOnline =
+            state.isConnected === true &&
+            state.type !== Network.NetworkStateType.NONE &&
+            state.isInternetReachable !== false;
+          if (isOnline) {
+            setIsOffline(false);
+            fetchFeed();
+          } else {
+            setIsOffline(true);
+          }
+        });
+      }
+    } catch {}
+
+    return () => {
+      subscription?.remove?.();
+    };
   }, [fetchFeed]);
 
   const handleOpenCollect = useCallback(
@@ -322,8 +401,8 @@ export default function HomeScreen() {
   // Compute dynamic visited count across all CMs
   const effectiveVisitedCount = useMemo(() => {
     if (!feedData?.customers) return stats.visitedCustomersToday || 0;
-    const visitedCount = feedData.customers.filter((c) =>
-      getCustomerVisitedStatus(c, currentCMId).isVisited
+    const visitedCount = feedData.customers.filter(
+      (c) => getCustomerVisitedStatus(c, currentCMId).isVisited,
     ).length;
     return Math.max(stats.visitedCustomersToday || 0, visitedCount);
   }, [feedData?.customers, stats.visitedCustomersToday, currentCMId]);
@@ -353,7 +432,10 @@ export default function HomeScreen() {
           <View style={styles.heroTopRow}>
             <View>
               <Text style={styles.cmRoleBadge}>COLLECTION MANAGER</Text>
-              <Text variant="headlineSmall" style={styles.heroTitle}>
+              <Text
+                variant="headlineSmall"
+                style={[styles.heroTitle, { textTransform: "capitalize" }]}
+              >
                 {user?.name || user?.collectionManagerId || "CM Dashboard"}
               </Text>
               <Text style={styles.heroSubtitle}>
@@ -390,7 +472,8 @@ export default function HomeScreen() {
           <View style={styles.subKpiRow}>
             <View style={styles.subKpiItem}>
               <Text style={styles.subKpiVal}>
-                {effectiveVisitedCount} / {stats.totalCustomers || feedData?.customers?.length || 0}
+                {effectiveVisitedCount} /{" "}
+                {stats.totalCustomers || feedData?.customers?.length || 0}
               </Text>
               <Text style={styles.subKpiLabel}>Visited</Text>
             </View>
@@ -515,7 +598,21 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {errorMessage ? (
+        {isOffline ? (
+          <View style={styles.offlineBanner}>
+            <Text style={styles.offlineBannerText}>
+              📶 Offline Mode • Connect to Wi-Fi/Data to sync latest collections
+            </Text>
+            <TouchableOpacity
+              style={styles.offlineBannerBtn}
+              onPress={() => fetchFeed(true)}
+            >
+              <Text style={styles.offlineBannerBtnText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {errorMessage && !isOffline ? (
           <View style={styles.errorBox}>
             <Text style={styles.errorBoxText}>⚠️ {errorMessage}</Text>
             <TouchableOpacity
@@ -537,9 +634,20 @@ export default function HomeScreen() {
       searchQuery,
       activeFilter,
       feedData?.customers?.length,
+      isOffline,
       errorMessage,
     ],
   );
+
+  // If offline and no cache is available, show full-screen Fallback UI
+  if (isOffline && !feedData) {
+    return (
+      <OfflineFallback
+        isRetrying={loading || refreshing}
+        onRetry={() => fetchFeed(true)}
+      />
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
@@ -829,5 +937,35 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 12,
     fontWeight: "700",
+  },
+  offlineBanner: {
+    backgroundColor: "#fef2f2",
+    borderWidth: 1,
+    borderColor: "#fca5a5",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  offlineBannerText: {
+    color: "#991b1b",
+    fontSize: 12,
+    fontWeight: "700",
+    flex: 1,
+  },
+  offlineBannerBtn: {
+    backgroundColor: "#dc2626",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    marginLeft: 8,
+  },
+  offlineBannerBtnText: {
+    color: "#ffffff",
+    fontSize: 11,
+    fontWeight: "800",
   },
 });

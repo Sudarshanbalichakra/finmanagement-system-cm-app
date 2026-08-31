@@ -1,3 +1,15 @@
+import { MobileApi } from "@/services/api";
+import { useAuthStore } from "@/store/auth.store";
+import {
+  CustomerFeedItem,
+  LoanLedgerItem,
+  PigmyLedgerItem,
+} from "@/types/cm.types";
+import {
+  getLoanCollectionStatus,
+  getPigmyCollectionStatus,
+} from "@/utils/collection-status";
+import { getFriendlyErrorMessage } from "@/utils/error-handler";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -10,20 +22,6 @@ import {
   View,
 } from "react-native";
 import { Text } from "react-native-paper";
-import {
-  CustomerFeedItem,
-  LoanItem,
-  PigmyAccountItem,
-  LoanLedgerItem,
-  PigmyLedgerItem,
-} from "@/types/cm.types";
-import { MobileApi } from "@/services/api";
-import { useAuthStore } from "@/store/auth.store";
-import {
-  getLoanCollectionStatus,
-  getPigmyCollectionStatus,
-} from "@/utils/collection-status";
-import { getFriendlyErrorMessage } from "@/utils/error-handler";
 
 interface CustomerDetailsModalProps {
   visible: boolean;
@@ -32,7 +30,7 @@ interface CustomerDetailsModalProps {
   onOpenCollect: (
     customer: CustomerFeedItem,
     type?: "LOAN" | "PIGMY",
-    targetId?: string
+    targetId?: string,
   ) => void;
 }
 
@@ -43,12 +41,20 @@ export function CustomerDetailsModal({
   onOpenCollect,
 }: CustomerDetailsModalProps) {
   const currentCMId = useAuthStore((state) => state.user?.collectionManagerId);
-  const [activeTab, setActiveTab] = useState<"LOANS" | "PIGMY" | "INFO">("LOANS");
+  const [activeTab, setActiveTab] = useState<"LOANS" | "PIGMY">("LOANS");
   const [loanLedgers, setLoanLedgers] = useState<{
-    [loanId: string]: { loading: boolean; items: LoanLedgerItem[]; error?: string };
+    [loanId: string]: {
+      loading: boolean;
+      items: LoanLedgerItem[];
+      error?: string;
+    };
   }>({});
   const [pigmyLedgers, setPigmyLedgers] = useState<{
-    [pigmyId: string]: { loading: boolean; items: PigmyLedgerItem[]; error?: string };
+    [pigmyId: string]: {
+      loading: boolean;
+      items: PigmyLedgerItem[];
+      error?: string;
+    };
   }>({});
 
   useEffect(() => {
@@ -58,7 +64,7 @@ export function CustomerDetailsModal({
       } else if (customer.pigmyAccounts && customer.pigmyAccounts.length > 0) {
         setActiveTab("PIGMY");
       } else {
-        setActiveTab("INFO");
+        setActiveTab("LOANS");
       }
     }
   }, [customer, visible]);
@@ -88,7 +94,10 @@ export function CustomerDetailsModal({
         [loanId]: {
           loading: false,
           items: [],
-          error: getFriendlyErrorMessage(err, "Unable to load collection ledger history."),
+          error: getFriendlyErrorMessage(
+            err,
+            "Unable to load collection ledger history.",
+          ),
         },
       }));
     }
@@ -112,7 +121,10 @@ export function CustomerDetailsModal({
         [pigmyId]: {
           loading: false,
           items: [],
-          error: getFriendlyErrorMessage(err, "Unable to load pigmy passbook history."),
+          error: getFriendlyErrorMessage(
+            err,
+            "Unable to load pigmy passbook history.",
+          ),
         },
       }));
     }
@@ -124,7 +136,7 @@ export function CustomerDetailsModal({
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.backButton}>
-            <Text style={styles.backText}>← Back</Text>
+            <Text style={styles.backText}>Back</Text>
           </TouchableOpacity>
           <Text variant="titleMedium" style={styles.headerTitle}>
             Customer Passbook
@@ -142,7 +154,10 @@ export function CustomerDetailsModal({
                 </Text>
               </View>
               <View style={styles.profileInfo}>
-                <Text variant="titleLarge" style={styles.customerName}>
+                <Text
+                  variant="titleLarge"
+                  style={[styles.customerName, { textTransform: "capitalize" }]}
+                >
                   {customer.customerName}
                 </Text>
                 <Text style={styles.customerId}>ID: {customer.customerId}</Text>
@@ -159,17 +174,6 @@ export function CustomerDetailsModal({
               <View style={styles.addressRow}>
                 <Text style={styles.addressLabel}>📍 Address:</Text>
                 <Text style={styles.addressText}>{customer.address}</Text>
-              </View>
-            ) : null}
-
-            {customer.nominee?.nomineeName ? (
-              <View style={styles.nomineeCard}>
-                <Text style={styles.nomineeTitle}>Nominee Details</Text>
-                <Text style={styles.nomineeText}>
-                  {customer.nominee.nomineeName} (
-                  {customer.nominee.nomineeRelation || "Relation"}) - 📞{" "}
-                  {customer.nominee.nomineeNumber || "N/A"}
-                </Text>
               </View>
             ) : null}
           </View>
@@ -203,20 +207,6 @@ export function CustomerDetailsModal({
                 Pigmy ({customer.pigmyAccounts?.length || 0})
               </Text>
             </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.tab, activeTab === "INFO" && styles.tabActive]}
-              onPress={() => setActiveTab("INFO")}
-            >
-              <Text
-                style={[
-                  styles.tabText,
-                  activeTab === "INFO" && styles.tabTextActive,
-                ]}
-              >
-                KYC Info
-              </Text>
-            </TouchableOpacity>
           </View>
 
           {/* LOANS TAB */}
@@ -232,43 +222,51 @@ export function CustomerDetailsModal({
                           <Text style={styles.cardId}>Loan #{loan.loanId}</Text>
                           <Text style={styles.cardStatus}>{loan.status}</Text>
                         </View>
-                      {(() => {
-                        const status = getLoanCollectionStatus(loan, customer, currentCMId);
+                        {(() => {
+                          const status = getLoanCollectionStatus(
+                            loan,
+                            customer,
+                            currentCMId,
+                          );
 
-                        if (status.isPaid) {
-                          return (
-                            <View
-                              style={[
-                                styles.collectMiniButtonDisabled,
-                                !status.isSelf && styles.collectMiniButtonColleague,
-                              ]}
-                            >
-                              <Text
+                          if (status.isPaid) {
+                            return (
+                              <View
                                 style={[
-                                  styles.collectMiniTextDisabled,
-                                  !status.isSelf && styles.collectMiniTextColleague,
+                                  styles.collectMiniButtonDisabled,
+                                  !status.isSelf &&
+                                    styles.collectMiniButtonColleague,
                                 ]}
                               >
-                                {status.isSelf
-                                  ? `✅ Paid (₹${status.collectedAmount || loan.todayCollectionAmount || 0})`
-                                  : `👥 Collected by Colleague`}
-                              </Text>
-                            </View>
-                          );
-                        }
+                                <Text
+                                  style={[
+                                    styles.collectMiniTextDisabled,
+                                    !status.isSelf &&
+                                      styles.collectMiniTextColleague,
+                                  ]}
+                                >
+                                  {status.isSelf
+                                    ? `✅ Paid (₹${status.collectedAmount || loan.todayCollectionAmount || 0})`
+                                    : `👥 Collected by Colleague`}
+                                </Text>
+                              </View>
+                            );
+                          }
 
-                        return (
-                          <TouchableOpacity
-                            style={styles.collectMiniButton}
-                            onPress={() =>
-                              onOpenCollect(customer, "LOAN", loan.loanId)
-                            }
-                          >
-                            <Text style={styles.collectMiniText}>+ Collect</Text>
-                          </TouchableOpacity>
-                        );
-                      })()}
-                    </View>
+                          return (
+                            <TouchableOpacity
+                              style={styles.collectMiniButton}
+                              onPress={() =>
+                                onOpenCollect(customer, "LOAN", loan.loanId)
+                              }
+                            >
+                              <Text style={styles.collectMiniText}>
+                                + Collect
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })()}
+                      </View>
 
                       {/* Loan Figures (Directly from API) */}
                       <View style={styles.figuresGrid}>
@@ -305,6 +303,20 @@ export function CustomerDetailsModal({
                           </Text>
                         </View>
                       </View>
+
+                      {/* Assurity Details for Loan */}
+                      {loan.assurity?.name ? (
+                        <View style={styles.loanAssurityBox}>
+                          <Text style={styles.loanAssurityLabel}>
+                            Assurity Details
+                          </Text>
+                          <Text style={styles.loanAssurityText}>
+                            {loan.assurity.name} (
+                            {loan.assurity.relationship || "Relation"}) - 📞{" "}
+                            {loan.assurity.mobile || "N/A"}
+                          </Text>
+                        </View>
+                      ) : null}
 
                       {/* Ledger Accordion */}
                       <TouchableOpacity
@@ -345,11 +357,13 @@ export function CustomerDetailsModal({
                         </View>
                       )}
 
-                      {ledger?.items && ledger.items.length === 0 && !ledger.loading && (
-                        <Text style={styles.emptyLedgerText}>
-                          No collection history recorded yet for this loan.
-                        </Text>
-                      )}
+                      {ledger?.items &&
+                        ledger.items.length === 0 &&
+                        !ledger.loading && (
+                          <Text style={styles.emptyLedgerText}>
+                            No collection history recorded yet for this loan.
+                          </Text>
+                        )}
                     </View>
                   );
                 })
@@ -378,43 +392,51 @@ export function CustomerDetailsModal({
                             {pigmy.schemeName || "Daily Savings"}
                           </Text>
                         </View>
-                      {(() => {
-                        const status = getPigmyCollectionStatus(pigmy, customer, currentCMId);
+                        {(() => {
+                          const status = getPigmyCollectionStatus(
+                            pigmy,
+                            customer,
+                            currentCMId,
+                          );
 
-                        if (status.isPaid) {
-                          return (
-                            <View
-                              style={[
-                                styles.collectMiniButtonDisabled,
-                                !status.isSelf && styles.collectMiniButtonColleague,
-                              ]}
-                            >
-                              <Text
+                          if (status.isPaid) {
+                            return (
+                              <View
                                 style={[
-                                  styles.collectMiniTextDisabled,
-                                  !status.isSelf && styles.collectMiniTextColleague,
+                                  styles.collectMiniButtonDisabled,
+                                  !status.isSelf &&
+                                    styles.collectMiniButtonColleague,
                                 ]}
                               >
-                                {status.isSelf
-                                  ? `✅ Deposited (₹${status.collectedAmount || pigmy.todayCollectionAmount || 0})`
-                                  : `👥 Collected by Colleague`}
-                              </Text>
-                            </View>
-                          );
-                        }
+                                <Text
+                                  style={[
+                                    styles.collectMiniTextDisabled,
+                                    !status.isSelf &&
+                                      styles.collectMiniTextColleague,
+                                  ]}
+                                >
+                                  {status.isSelf
+                                    ? `✅ Deposited (₹${status.collectedAmount || pigmy.todayCollectionAmount || 0})`
+                                    : `👥 Collected by Colleague`}
+                                </Text>
+                              </View>
+                            );
+                          }
 
-                        return (
-                          <TouchableOpacity
-                            style={styles.collectMiniButton}
-                            onPress={() =>
-                              onOpenCollect(customer, "PIGMY", pigmy.pigmyId)
-                            }
-                          >
-                            <Text style={styles.collectMiniText}>+ Deposit</Text>
-                          </TouchableOpacity>
-                        );
-                      })()}
-                    </View>
+                          return (
+                            <TouchableOpacity
+                              style={styles.collectMiniButton}
+                              onPress={() =>
+                                onOpenCollect(customer, "PIGMY", pigmy.pigmyId)
+                              }
+                            >
+                              <Text style={styles.collectMiniText}>
+                                + Deposit
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })()}
+                      </View>
 
                       {/* Pigmy Figures */}
                       <View style={styles.figuresGrid}>
@@ -494,11 +516,13 @@ export function CustomerDetailsModal({
                         </View>
                       )}
 
-                      {ledger?.items && ledger.items.length === 0 && !ledger.loading && (
-                        <Text style={styles.emptyLedgerText}>
-                          No deposits recorded yet for this pigmy account.
-                        </Text>
-                      )}
+                      {ledger?.items &&
+                        ledger.items.length === 0 &&
+                        !ledger.loading && (
+                          <Text style={styles.emptyLedgerText}>
+                            No deposits recorded yet for this pigmy account.
+                          </Text>
+                        )}
                     </View>
                   );
                 })
@@ -509,23 +533,6 @@ export function CustomerDetailsModal({
                   </Text>
                 </View>
               )}
-            </View>
-          )}
-
-          {/* KYC INFO TAB */}
-          {activeTab === "INFO" && (
-            <View style={styles.sectionContainer}>
-              <View style={styles.card}>
-                <Text style={styles.cardId}>Identity Proof</Text>
-                <Text style={styles.infoLine}>
-                  Type: {customer.idProofType || "Aadhaar / National ID"}
-                </Text>
-                {customer.idProofPhoto && (
-                  <Text style={styles.infoLineMuted}>
-                    Proof Document: Available on server
-                  </Text>
-                )}
-              </View>
             </View>
           )}
         </ScrollView>
@@ -632,20 +639,42 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     marginTop: 2,
   },
-  nomineeCard: {
+  assurityCard: {
     marginTop: 12,
     backgroundColor: "#f9fafb",
     padding: 12,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#f3f4f6",
   },
-  nomineeTitle: {
+  assurityTitle: {
     fontSize: 11,
     fontWeight: "800",
     color: "#4b5563",
     textTransform: "uppercase",
   },
-  nomineeText: {
+  assurityText: {
     fontSize: 13,
+    color: "#1f2937",
+    marginTop: 2,
+  },
+  loanAssurityBox: {
+    marginTop: 12,
+    backgroundColor: "#f9fafb",
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#f3f4f6",
+  },
+  loanAssurityLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#6b7280",
+    textTransform: "uppercase",
+  },
+  loanAssurityText: {
+    fontSize: 12,
+    fontWeight: "700",
     color: "#1f2937",
     marginTop: 2,
   },

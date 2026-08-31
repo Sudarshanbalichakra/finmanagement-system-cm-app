@@ -185,8 +185,7 @@ export const CollectCashModal = React.memo(function CollectCashModal({
                 }
                 await MobileApi.recordPigmyCollection(selectedPigmy.pigmyId, {
                   amount: numAmount,
-                  collectionDate: todayDateStr,
-                  customerId: customer.customerId,
+                  collectionDate: todayDateStr
                 });
               }
 

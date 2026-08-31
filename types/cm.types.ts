@@ -1,7 +1,7 @@
-export interface NomineeInfo {
-  nomineeName?: string;
-  nomineeNumber?: string;
-  nomineeRelation?: string;
+export interface Assurity {
+  name: string | null;
+  mobile?: string | number | null;
+  relationship?: string | null;
 }
 
 export interface LoanItem {
@@ -9,11 +9,13 @@ export interface LoanItem {
   loanAmount: number;
   interestRate?: number;
   durationMonths?: number;
+  disbursedCash?: number;
   repaymentAmount: number;
   pendingAmount: number;
   startDate?: string;
   endDate?: string;
   status: "ACTIVE" | "COMPLETED" | "DEFAULTED" | string;
+  assurity?: Assurity;
   isPaid?: boolean;
   todayCollected?: boolean;
   todayCollectionAmount?: number;
@@ -27,6 +29,8 @@ export interface PigmyAccountItem {
   schemeName?: string;
   duration?: number;
   durationUnit?: "DAYS" | "MONTHS" | string;
+  depositMode?: "FLEXIBLE" | "FIXED" | string;
+  depositFrequency?: "DAILY" | "WEEKLY" | "MONTHLY" | string;
   startDate?: string;
   maturityDate?: string;
   totalSavedAmount: number;
@@ -43,14 +47,10 @@ export interface CustomerFeedItem {
   customerName: string;
   mobile: string;
   address?: string;
-  customerPhoto?: string;
-  idProofType?: string;
-  idProofPhoto?: string;
-  nominee?: NomineeInfo;
   hasActiveLoan?: boolean;
   hasActivePigmy?: boolean;
-  isPaid?: boolean;
   todayVisited?: boolean;
+  isPaid?: boolean;
   todayCollected?: boolean;
   todayCollectionAmount?: number;
   collectedBy?: string;
@@ -136,6 +136,59 @@ export interface DailySummaryData {
 export interface DailySummaryResponse {
   success: boolean;
   data: DailySummaryData;
+  message?: string;
+}
+
+export interface MySummaryCM {
+  collectionManagerId: string;
+  name: string;
+  mobile?: string;
+  email?: string;
+  clientId?: string;
+}
+
+export interface MySummaryOverallStats {
+  totalCashInHand: number;
+  totalTransactions: number;
+  uniqueCustomersVisited: number;
+  totalLoanCollected: number;
+  loanTransactionsCount: number;
+  totalPigmyCollected: number;
+  pigmyTransactionsCount: number;
+}
+
+export interface MySummaryLoanCollection {
+  collectionId?: string;
+  loanId: string;
+  customerId: string;
+  customerName?: string;
+  amount: number;
+  isPaid?: boolean;
+  approvalStatus?: string;
+  createdAt?: string;
+}
+
+export interface MySummaryPigmyCollection {
+  collectionId?: string;
+  pigmyId: string;
+  customerId: string;
+  customerName?: string;
+  amount: number;
+  isPaid?: boolean;
+  createdAt?: string;
+}
+
+export interface MyDayCloseSummaryData {
+  date: string;
+  collectionManager?: MySummaryCM;
+  overallStats?: MySummaryOverallStats;
+  loanCollections?: MySummaryLoanCollection[];
+  pigmyCollections?: MySummaryPigmyCollection[];
+}
+
+export interface MyDayCloseSummaryResponse {
+  success: boolean;
+  data: MyDayCloseSummaryData;
   message?: string;
 }
 
