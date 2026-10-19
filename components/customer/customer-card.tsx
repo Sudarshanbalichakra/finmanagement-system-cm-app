@@ -35,6 +35,7 @@ export const CustomerCard = React.memo(
     const hasPigmy = Boolean(
       item.pigmyAccounts && item.pigmyAccounts.length > 0,
     );
+    const hasAnyAccount = hasLoans || hasPigmy;
     const initialChar = item.customerName
       ? item.customerName.charAt(0).toUpperCase()
       : "C";
@@ -66,11 +67,21 @@ export const CustomerCard = React.memo(
       }
     };
 
+    const getCollectButtonText = () => {
+      if (loanPending && pigmyPending) return "+ Collect Cash";
+      if (loanPending) return "+ Collect Loan Cash";
+      if (pigmyPending) return "+ Collect Pigmy Cash";
+      if (hasLoans) return "+ Collect Loan Cash";
+      if (hasPigmy) return "+ Collect Pigmy Cash";
+      return "+ Collect Cash";
+    };
+
     return (
       <TouchableOpacity
         style={styles.customerCard}
-        activeOpacity={0.88}
-        onPress={() => onPress(item)}
+        activeOpacity={hasAnyAccount ? 0.88 : 1}
+        onPress={hasAnyAccount ? () => onPress(item) : undefined}
+        disabled={!hasAnyAccount}
       >
         {/* Customer Header */}
         <View style={styles.cardHeader}>
@@ -99,6 +110,9 @@ export const CustomerCard = React.memo(
             </View>
 
             <View style={styles.subInfoRow}>
+              {item.customerId ? (
+                <Text style={styles.customerIdText}>ID: {item.customerId}</Text>
+              ) : null}
               {item.mobile ? (
                 <TouchableOpacity
                   onPress={() => onCall(item.mobile)}
@@ -119,131 +133,131 @@ export const CustomerCard = React.memo(
         ) : null}
 
         {/* Account Details Pills */}
-        <View style={styles.accountsContainer}>
-          {hasLoans && activeLoan && (
-            <View style={styles.accountPill}>
-              <View style={styles.pillTextWrap}>
-                <Text style={styles.pillLabel}>Loan: {activeLoan.loanId}</Text>
-                <Text style={styles.pillValueRed}>
-                  ₹{activeLoan.pendingAmount?.toLocaleString("en-IN") || "0"}{" "}
-                  Due
-                </Text>
-              </View>
+        {hasAnyAccount && (
+          <View style={styles.accountsContainer}>
+            {hasLoans && activeLoan && (
+              <View style={styles.accountPill}>
+                <View style={styles.pillTextWrap}>
+                  <Text style={styles.pillLabel}>Loan: {activeLoan.loanId}</Text>
+                  <Text style={styles.pillValueRed}>
+                    ₹{activeLoan.pendingAmount?.toLocaleString("en-IN") || "0"}{" "}
+                    Due
+                  </Text>
+                </View>
 
-              {loanStatus.isPaid ? (
-                loanStatus.isSelf ? (
-                  <View style={styles.pillStatusDoneBox}>
-                    <Text style={styles.pillStatusDoneText}>
-                      ✅ Today Collection Collected
-                      {loanStatus.collectedAmount > 0
-                        ? ` (₹${loanStatus.collectedAmount})`
-                        : ""}
-                    </Text>
-                  </View>
+                {loanStatus.isPaid ? (
+                  loanStatus.isSelf ? (
+                    <View style={styles.pillStatusDoneBox}>
+                      <Text style={styles.pillStatusDoneText}>
+                        ✅ Today Collection Collected
+                        {loanStatus.collectedAmount > 0
+                          ? ` (₹${loanStatus.collectedAmount})`
+                          : ""}
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={styles.pillStatusColleagueBox}>
+                      <Text style={styles.pillStatusColleagueText}>
+                        👥 Collected by Colleague
+                      </Text>
+                    </View>
+                  )
                 ) : (
-                  <View style={styles.pillStatusColleagueBox}>
-                    <Text style={styles.pillStatusColleagueText}>
-                      👥 Collected by Colleague
-                    </Text>
-                  </View>
-                )
-              ) : (
-                <TouchableOpacity
-                  style={styles.pillActionBtn}
-                  onPress={() => onCollect(item, "LOAN", activeLoan.loanId)}
-                >
-                  <Text style={styles.pillActionBtnText}>Collect Loan</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          )}
-
-          {hasPigmy && activePigmy && (
-            <View style={styles.accountPill}>
-              <View style={styles.pillTextWrap}>
-                <Text style={styles.pillLabel}>
-                  Pigmy: {activePigmy.pigmyId}
-                </Text>
-                <Text style={styles.pillValueGreen}>
-                  ₹
-                  {activePigmy.totalSavedAmount?.toLocaleString("en-IN") || "0"}{" "}
-                  Saved
-                </Text>
+                  <TouchableOpacity
+                    style={styles.pillActionBtn}
+                    onPress={() => onCollect(item, "LOAN", activeLoan.loanId)}
+                  >
+                    <Text style={styles.pillActionBtnText}>Collect Loan</Text>
+                  </TouchableOpacity>
+                )}
               </View>
+            )}
 
-              {pigmyStatus.isPaid ? (
-                pigmyStatus.isSelf ? (
-                  <View style={styles.pillStatusDoneBox}>
-                    <Text style={styles.pillStatusDoneText}>
-                      ✅ Today Collection Collected
-                      {pigmyStatus.collectedAmount > 0
-                        ? ` (₹${pigmyStatus.collectedAmount})`
-                        : ""}
-                    </Text>
-                  </View>
+            {hasPigmy && activePigmy && (
+              <View style={styles.accountPill}>
+                <View style={styles.pillTextWrap}>
+                  <Text style={styles.pillLabel}>
+                    Pigmy: {activePigmy.pigmyId}
+                  </Text>
+                  <Text style={styles.pillValueGreen}>
+                    ₹
+                    {activePigmy.totalSavedAmount?.toLocaleString("en-IN") || "0"}{" "}
+                    Saved
+                  </Text>
+                </View>
+
+                {pigmyStatus.isPaid ? (
+                  pigmyStatus.isSelf ? (
+                    <View style={styles.pillStatusDoneBox}>
+                      <Text style={styles.pillStatusDoneText}>
+                        ✅ Today Collection Collected
+                        {pigmyStatus.collectedAmount > 0
+                          ? ` (₹${pigmyStatus.collectedAmount})`
+                          : ""}
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={styles.pillStatusColleagueBox}>
+                      <Text style={styles.pillStatusColleagueText}>
+                        👥 Collected by Colleague
+                      </Text>
+                    </View>
+                  )
                 ) : (
-                  <View style={styles.pillStatusColleagueBox}>
-                    <Text style={styles.pillStatusColleagueText}>
-                      👥 Collected by Colleague
-                    </Text>
-                  </View>
-                )
-              ) : (
-                <TouchableOpacity
-                  style={styles.pillActionBtnPigmy}
-                  onPress={() => onCollect(item, "PIGMY", activePigmy.pigmyId)}
-                >
-                  <Text style={styles.pillActionBtnText}>Collect Pigmy</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          )}
-        </View>
+                  <TouchableOpacity
+                    style={styles.pillActionBtnPigmy}
+                    onPress={() => onCollect(item, "PIGMY", activePigmy.pigmyId)}
+                  >
+                    <Text style={styles.pillActionBtnText}>Collect Pigmy</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+          </View>
+        )}
 
-        {/* Card Actions */}
-        <View style={styles.cardActions}>
-          <TouchableOpacity
-            style={styles.detailsBtn}
-            onPress={() => onPress(item)}
-          >
-            <Text style={styles.detailsBtnText}>Passbook</Text>
-          </TouchableOpacity>
-
-          {customerStatus.allCollected ? (
-            <View
-              style={[
-                styles.collectBtnDisabled,
-                customerStatus.isColleagueCollected &&
-                  styles.collectBtnColleagueDisabled,
-              ]}
+        {/* Card Actions - Hidden when customer has no loan and no pigmy accounts */}
+        {hasAnyAccount && (
+          <View style={styles.cardActions}>
+            <TouchableOpacity
+              style={styles.detailsBtn}
+              onPress={() => onPress(item)}
             >
-              <Text
+              <Text style={styles.detailsBtnText}>Passbook</Text>
+            </TouchableOpacity>
+
+            {customerStatus.allCollected ? (
+              <View
                 style={[
-                  styles.collectBtnDisabledText,
+                  styles.collectBtnDisabled,
                   customerStatus.isColleagueCollected &&
-                    styles.collectBtnColleagueDisabledText,
+                    styles.collectBtnColleagueDisabled,
                 ]}
               >
-                {customerStatus.isColleagueCollected
-                  ? `👥 Collected by Colleague`
-                  : "✅ Today Collection Collected"}
-              </Text>
-            </View>
-          ) : (
-            <TouchableOpacity
-              style={styles.collectBtn}
-              onPress={handlePrimaryCollect}
-            >
-              <Text style={styles.collectBtnText}>
-                {loanPending && pigmyPending
-                  ? "+ Collect Cash"
-                  : loanPending
-                    ? "+ Collect Loan Cash"
-                    : "+ Collect Pigmy Cash"}
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
+                <Text
+                  style={[
+                    styles.collectBtnDisabledText,
+                    customerStatus.isColleagueCollected &&
+                      styles.collectBtnColleagueDisabledText,
+                  ]}
+                >
+                  {customerStatus.isColleagueCollected
+                    ? `👥 Collected by Colleague`
+                    : "✅ Today Collection Collected"}
+                </Text>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.collectBtn}
+                onPress={handlePrimaryCollect}
+              >
+                <Text style={styles.collectBtnText}>
+                  {getCollectButtonText()}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
       </TouchableOpacity>
     );
   },

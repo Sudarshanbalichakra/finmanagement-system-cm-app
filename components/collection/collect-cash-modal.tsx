@@ -1,3 +1,11 @@
+import { MobileApi } from "@/services/api";
+import { useAuthStore } from "@/store/auth.store";
+import { CustomerFeedItem } from "@/types/cm.types";
+import {
+  getLoanCollectionStatus,
+  getPigmyCollectionStatus,
+} from "@/utils/collection-status";
+import { getFriendlyErrorMessage } from "@/utils/error-handler";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
@@ -11,14 +19,6 @@ import {
   View,
 } from "react-native";
 import { ActivityIndicator, Text } from "react-native-paper";
-import { CustomerFeedItem } from "@/types/cm.types";
-import { MobileApi } from "@/services/api";
-import { useAuthStore } from "@/store/auth.store";
-import {
-  getLoanCollectionStatus,
-  getPigmyCollectionStatus,
-} from "@/utils/collection-status";
-import { getFriendlyErrorMessage } from "@/utils/error-handler";
 
 interface CollectCashModalProps {
   visible: boolean;
@@ -41,7 +41,9 @@ export const CollectCashModal = React.memo(function CollectCashModal({
 }: CollectCashModalProps) {
   const currentCMId = useAuthStore((state) => state.user?.collectionManagerId);
 
-  const [collectionType, setCollectionType] = useState<"LOAN" | "PIGMY">("LOAN");
+  const [collectionType, setCollectionType] = useState<"LOAN" | "PIGMY">(
+    "LOAN",
+  );
   const [selectedLoanId, setSelectedLoanId] = useState<string>("");
   const [selectedPigmyId, setSelectedPigmyId] = useState<string>("");
   const [amount, setAmount] = useState<string>("");
@@ -49,7 +51,10 @@ export const CollectCashModal = React.memo(function CollectCashModal({
   const [inlineError, setInlineError] = useState<string | null>(null);
 
   // Strictly locked today's date (YYYY-MM-DD)
-  const todayDateStr = useMemo(() => new Date().toISOString().split("T")[0], []);
+  const todayDateStr = useMemo(
+    () => new Date().toISOString().split("T")[0],
+    [],
+  );
 
   // Synchronize state when customer or modal opens
   useEffect(() => {
@@ -61,10 +66,10 @@ export const CollectCashModal = React.memo(function CollectCashModal({
       const allPigmy = customer.pigmyAccounts || [];
 
       const unpaidLoans = allLoans.filter(
-        (l) => !getLoanCollectionStatus(l, customer, currentCMId).isPaid
+        (l) => !getLoanCollectionStatus(l, customer, currentCMId).isPaid,
       );
       const unpaidPigmy = allPigmy.filter(
-        (p) => !getPigmyCollectionStatus(p, customer, currentCMId).isPaid
+        (p) => !getPigmyCollectionStatus(p, customer, currentCMId).isPaid,
       );
 
       if (initialType) {
@@ -91,7 +96,14 @@ export const CollectCashModal = React.memo(function CollectCashModal({
         setSelectedPigmyId(unpaidPigmy[0]?.pigmyId || allPigmy[0].pigmyId);
       }
     }
-  }, [customer, visible, initialType, initialLoanId, initialPigmyId, currentCMId]);
+  }, [
+    customer,
+    visible,
+    initialType,
+    initialLoanId,
+    initialPigmyId,
+    currentCMId,
+  ]);
 
   if (!customer) return null;
 
@@ -105,8 +117,16 @@ export const CollectCashModal = React.memo(function CollectCashModal({
     activePigmyAccounts[0];
 
   // Evaluate current account status independently
-  const loanStatus = getLoanCollectionStatus(selectedLoan, customer, currentCMId);
-  const pigmyStatus = getPigmyCollectionStatus(selectedPigmy, customer, currentCMId);
+  const loanStatus = getLoanCollectionStatus(
+    selectedLoan,
+    customer,
+    currentCMId,
+  );
+  const pigmyStatus = getPigmyCollectionStatus(
+    selectedPigmy,
+    customer,
+    currentCMId,
+  );
 
   const currentAccountStatus =
     collectionType === "LOAN" ? loanStatus : pigmyStatus;
@@ -116,24 +136,22 @@ export const CollectCashModal = React.memo(function CollectCashModal({
   const currentAccountCollector = currentAccountStatus.collectorName;
   const collectedTodayAmount = currentAccountStatus.collectedAmount;
 
-  const handleAddAmount = (add: number) => {
-    if (isCurrentAccountCollected) return;
-    const current = parseFloat(amount) || 0;
-    setAmount((current + add).toString());
-    setInlineError(null);
-  };
-
+  // Preset amount selection (one-time entry, sets value directly without multiplying/accumulating)
   const handleSetAmount = (val: number) => {
     if (isCurrentAccountCollected) return;
     setAmount(val.toString());
     setInlineError(null);
   };
 
+  const handleAddAmount = (val: number) => {
+    handleSetAmount(val);
+  };
+
   const handleConfirmAndSave = () => {
     if (isCurrentAccountCollected) {
       Alert.alert(
         "Already Collected",
-        "A daily collection has already been recorded for this account today and cannot be modified."
+        "A daily collection has already been recorded for this account today and cannot be modified.",
       );
       return;
     }
@@ -141,19 +159,28 @@ export const CollectCashModal = React.memo(function CollectCashModal({
     const numAmount = parseFloat(amount.trim());
     if (isNaN(numAmount) || numAmount <= 0) {
       setInlineError("Please enter a valid cash amount greater than 0.");
-      Alert.alert("Validation Error", "Please enter a valid cash amount greater than 0.");
+      Alert.alert(
+        "Validation Error",
+        "Please enter a valid cash amount greater than 0.",
+      );
       return;
     }
 
-    if (collectionType === "LOAN" && selectedLoan?.pendingAmount && numAmount > selectedLoan.pendingAmount) {
+    if (
+      collectionType === "LOAN" &&
+      selectedLoan?.pendingAmount &&
+      numAmount > selectedLoan.pendingAmount
+    ) {
       const errMsg = `Amount cannot exceed pending loan balance of ₹${selectedLoan.pendingAmount.toLocaleString("en-IN")}`;
       setInlineError(errMsg);
       Alert.alert("Validation Error", errMsg);
       return;
     }
 
-    const typeLabel = collectionType === "LOAN" ? "Loan Payment" : "Pigmy Deposit";
-    const accountCode = collectionType === "LOAN" ? selectedLoan?.loanId : selectedPigmy?.pigmyId;
+    const typeLabel =
+      collectionType === "LOAN" ? "Loan Payment" : "Pigmy Deposit";
+    const accountCode =
+      collectionType === "LOAN" ? selectedLoan?.loanId : selectedPigmy?.pigmyId;
 
     // Immutability confirmation popup
     Alert.alert(
@@ -185,20 +212,20 @@ export const CollectCashModal = React.memo(function CollectCashModal({
                 }
                 await MobileApi.recordPigmyCollection(selectedPigmy.pigmyId, {
                   amount: numAmount,
-                  collectionDate: todayDateStr
+                  collectionDate: todayDateStr,
                 });
               }
 
               Alert.alert(
                 "Collection Recorded",
-                `₹${numAmount.toLocaleString("en-IN")} collection successfully saved for ${customer.customerName}.`
+                `₹${numAmount.toLocaleString("en-IN")} collection successfully saved for ${customer.customerName}.`,
               );
               onSuccess();
               onClose();
             } catch (err: any) {
               const displayMsg = getFriendlyErrorMessage(
                 err,
-                "Unable to record collection. Please check your network and try again."
+                "Unable to record collection. Please check your network and try again.",
               );
               setInlineError(displayMsg);
               Alert.alert("Collection Failed", displayMsg);
@@ -207,7 +234,7 @@ export const CollectCashModal = React.memo(function CollectCashModal({
             }
           },
         },
-      ]
+      ],
     );
   };
 
@@ -227,9 +254,14 @@ export const CollectCashModal = React.memo(function CollectCashModal({
           <View style={styles.header}>
             <View style={styles.headerTextWrap}>
               <Text variant="titleLarge" style={styles.title}>
-                {isCurrentAccountCollected ? "Collection Details (View Only)" : "Collect Cash"}
+                {isCurrentAccountCollected
+                  ? "Collection Details (View Only)"
+                  : "Collect Cash"}
               </Text>
-              <Text style={styles.customerName} numberOfLines={1}>
+              <Text
+                style={[styles.customerName, { textTransform: "capitalize" }]}
+                numberOfLines={1}
+              >
                 {customer.customerName} ({customer.customerId})
               </Text>
             </View>
@@ -253,7 +285,8 @@ export const CollectCashModal = React.memo(function CollectCashModal({
               <View
                 style={[
                   styles.collectedBanner,
-                  !isCurrentAccountSelfCollected && styles.collectedBannerColleague,
+                  !isCurrentAccountSelfCollected &&
+                    styles.collectedBannerColleague,
                 ]}
               >
                 <View style={styles.collectedBannerTop}>
@@ -263,7 +296,8 @@ export const CollectCashModal = React.memo(function CollectCashModal({
                   <Text
                     style={[
                       styles.collectedBannerTitle,
-                      !isCurrentAccountSelfCollected && styles.collectedBannerColleagueTitle,
+                      !isCurrentAccountSelfCollected &&
+                        styles.collectedBannerColleagueTitle,
                     ]}
                   >
                     {isCurrentAccountSelfCollected
@@ -275,7 +309,8 @@ export const CollectCashModal = React.memo(function CollectCashModal({
                   <Text
                     style={[
                       styles.collectedBannerAmount,
-                      !isCurrentAccountSelfCollected && styles.collectedBannerColleagueAmount,
+                      !isCurrentAccountSelfCollected &&
+                        styles.collectedBannerColleagueAmount,
                     ]}
                   >
                     ₹{collectedTodayAmount.toLocaleString("en-IN")}
@@ -284,7 +319,8 @@ export const CollectCashModal = React.memo(function CollectCashModal({
                 <Text
                   style={[
                     styles.collectedBannerSubtitle,
-                    !isCurrentAccountSelfCollected && styles.collectedBannerColleagueSubtitle,
+                    !isCurrentAccountSelfCollected &&
+                      styles.collectedBannerColleagueSubtitle,
                   ]}
                 >
                   {isCurrentAccountSelfCollected
@@ -342,7 +378,8 @@ export const CollectCashModal = React.memo(function CollectCashModal({
                   style={[
                     styles.tabButtonText,
                     collectionType === "PIGMY" && styles.tabButtonTextActive,
-                    activePigmyAccounts.length === 0 && styles.tabButtonTextDisabled,
+                    activePigmyAccounts.length === 0 &&
+                      styles.tabButtonTextDisabled,
                   ]}
                 >
                   🏦 Pigmy Savings
@@ -354,14 +391,18 @@ export const CollectCashModal = React.memo(function CollectCashModal({
             {collectionType === "LOAN" && selectedLoan ? (
               <View style={styles.accountCard}>
                 <View style={styles.cardHeaderRow}>
-                  <Text style={styles.cardIdBadge}>Loan #{selectedLoan.loanId}</Text>
+                  <Text style={styles.cardIdBadge}>
+                    Loan #{selectedLoan.loanId}
+                  </Text>
                   {loanStatus.isPaid ? (
                     loanStatus.isSelf ? (
                       <Text style={[styles.statusPill, styles.statusPillDone]}>
                         ✅ Today Collection Collected
                       </Text>
                     ) : (
-                      <Text style={[styles.statusPill, styles.statusPillColleague]}>
+                      <Text
+                        style={[styles.statusPill, styles.statusPillColleague]}
+                      >
                         👥 Collected by Colleague
                       </Text>
                     )
@@ -387,10 +428,15 @@ export const CollectCashModal = React.memo(function CollectCashModal({
                         <Text
                           style={[
                             styles.chipText,
-                            selectedLoanId === l.loanId && styles.chipTextActive,
+                            selectedLoanId === l.loanId &&
+                              styles.chipTextActive,
                           ]}
                         >
-                          {l.loanId} {getLoanCollectionStatus(l, customer, currentCMId).isPaid ? "✓" : ""}
+                          {l.loanId}{" "}
+                          {getLoanCollectionStatus(l, customer, currentCMId)
+                            .isPaid
+                            ? "✓"
+                            : ""}
                         </Text>
                       </TouchableOpacity>
                     ))}
@@ -417,19 +463,25 @@ export const CollectCashModal = React.memo(function CollectCashModal({
             {collectionType === "PIGMY" && selectedPigmy ? (
               <View style={styles.accountCard}>
                 <View style={styles.cardHeaderRow}>
-                  <Text style={styles.cardIdBadge}>Pigmy #{selectedPigmy.pigmyId}</Text>
+                  <Text style={styles.cardIdBadge}>
+                    Pigmy #{selectedPigmy.pigmyId}
+                  </Text>
                   {pigmyStatus.isPaid ? (
                     pigmyStatus.isSelf ? (
                       <Text style={[styles.statusPill, styles.statusPillDone]}>
                         ✅ Today Collection Collected
                       </Text>
                     ) : (
-                      <Text style={[styles.statusPill, styles.statusPillColleague]}>
+                      <Text
+                        style={[styles.statusPill, styles.statusPillColleague]}
+                      >
                         👥 Collected by Colleague
                       </Text>
                     )
                   ) : (
-                    <Text style={[styles.statusPill, styles.statusPillPendingPigmy]}>
+                    <Text
+                      style={[styles.statusPill, styles.statusPillPendingPigmy]}
+                    >
                       🟡 Pending Deposit
                     </Text>
                   )}
@@ -450,10 +502,15 @@ export const CollectCashModal = React.memo(function CollectCashModal({
                         <Text
                           style={[
                             styles.chipText,
-                            selectedPigmyId === p.pigmyId && styles.chipTextActive,
+                            selectedPigmyId === p.pigmyId &&
+                              styles.chipTextActive,
                           ]}
                         >
-                          {p.pigmyId} {getPigmyCollectionStatus(p, customer, currentCMId).isPaid ? "✓" : ""}
+                          {p.pigmyId}{" "}
+                          {getPigmyCollectionStatus(p, customer, currentCMId)
+                            .isPaid
+                            ? "✓"
+                            : ""}
                         </Text>
                       </TouchableOpacity>
                     ))}
@@ -480,7 +537,9 @@ export const CollectCashModal = React.memo(function CollectCashModal({
             {/* 🔒 2. Date Field (Strictly Locked to Today) */}
             <View style={styles.lockedDateContainer}>
               <View style={styles.lockedDateHeader}>
-                <Text style={styles.lockedDateLabel}>Collection Date (Locked)</Text>
+                <Text style={styles.lockedDateLabel}>
+                  Collection Date (Locked)
+                </Text>
                 <Text style={styles.lockedBadge}>🔒 TODAY</Text>
               </View>
               <View style={styles.lockedInputBox}>
@@ -495,7 +554,9 @@ export const CollectCashModal = React.memo(function CollectCashModal({
             {!isCurrentAccountCollected ? (
               <>
                 <View style={styles.amountContainer}>
-                  <Text style={styles.amountLabel}>Collected Cash Amount (₹) *</Text>
+                  <Text style={styles.amountLabel}>
+                    Collected Cash Amount (₹) *
+                  </Text>
                   <View style={styles.amountInputRow}>
                     <Text style={styles.rupeePrefix}>₹</Text>
                     <TextInput
@@ -512,52 +573,78 @@ export const CollectCashModal = React.memo(function CollectCashModal({
                       autoFocus
                     />
                   </View>
-                  {collectionType === "LOAN" && selectedLoan?.pendingAmount ? (
-                    <Text style={styles.pendingHint}>
-                      Pending Loan Balance: ₹{selectedLoan.pendingAmount.toLocaleString("en-IN")}
-                    </Text>
-                  ) : null}
                 </View>
 
-                {/* Quick Amount Chips */}
+                {/* Quick Amount Chips (Sets value once directly, does not multiply or accumulate) */}
                 <View style={styles.quickChipsRow}>
                   <TouchableOpacity
-                    style={styles.quickChip}
-                    onPress={() => handleAddAmount(100)}
+                    style={[
+                      styles.quickChip,
+                      amount === "100" && styles.quickChipActive,
+                    ]}
+                    onPress={() => handleSetAmount(100)}
                     disabled={loading}
                   >
-                    <Text style={styles.quickChipText}>+₹100</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.quickChip}
-                    onPress={() => handleAddAmount(200)}
-                    disabled={loading}
-                  >
-                    <Text style={styles.quickChipText}>+₹200</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.quickChip}
-                    onPress={() => handleAddAmount(500)}
-                    disabled={loading}
-                  >
-                    <Text style={styles.quickChipText}>+₹500</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.quickChip}
-                    onPress={() => handleAddAmount(1000)}
-                    disabled={loading}
-                  >
-                    <Text style={styles.quickChipText}>+₹1000</Text>
-                  </TouchableOpacity>
-                  {collectionType === "LOAN" && selectedLoan?.pendingAmount ? (
-                    <TouchableOpacity
-                      style={[styles.quickChip, styles.quickChipFull]}
-                      onPress={() => handleSetAmount(selectedLoan.pendingAmount)}
-                      disabled={loading}
+                    <Text
+                      style={[
+                        styles.quickChipText,
+                        amount === "100" && styles.quickChipTextActive,
+                      ]}
                     >
-                      <Text style={styles.quickChipFullText}>Full Balance</Text>
-                    </TouchableOpacity>
-                  ) : null}
+                      ₹100
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.quickChip,
+                      amount === "200" && styles.quickChipActive,
+                    ]}
+                    onPress={() => handleSetAmount(200)}
+                    disabled={loading}
+                  >
+                    <Text
+                      style={[
+                        styles.quickChipText,
+                        amount === "200" && styles.quickChipTextActive,
+                      ]}
+                    >
+                      ₹200
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.quickChip,
+                      amount === "500" && styles.quickChipActive,
+                    ]}
+                    onPress={() => handleSetAmount(500)}
+                    disabled={loading}
+                  >
+                    <Text
+                      style={[
+                        styles.quickChipText,
+                        amount === "500" && styles.quickChipTextActive,
+                      ]}
+                    >
+                      ₹500
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.quickChip,
+                      amount === "1000" && styles.quickChipActive,
+                    ]}
+                    onPress={() => handleSetAmount(1000)}
+                    disabled={loading}
+                  >
+                    <Text
+                      style={[
+                        styles.quickChipText,
+                        amount === "1000" && styles.quickChipTextActive,
+                      ]}
+                    >
+                      ₹1000
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               </>
             ) : null}
@@ -578,13 +665,15 @@ export const CollectCashModal = React.memo(function CollectCashModal({
                 <View
                   style={[
                     styles.disabledCollectedBtn,
-                    !isCurrentAccountSelfCollected && styles.disabledColleagueBtn,
+                    !isCurrentAccountSelfCollected &&
+                      styles.disabledColleagueBtn,
                   ]}
                 >
                   <Text
                     style={[
                       styles.disabledCollectedBtnText,
-                      !isCurrentAccountSelfCollected && styles.disabledColleagueBtnText,
+                      !isCurrentAccountSelfCollected &&
+                        styles.disabledColleagueBtnText,
                     ]}
                   >
                     {isCurrentAccountSelfCollected
@@ -601,7 +690,9 @@ export const CollectCashModal = React.memo(function CollectCashModal({
                   {loading ? (
                     <ActivityIndicator size="small" color="#fff" />
                   ) : (
-                    <Text style={styles.confirmBtnText}>Confirm & Save Cash</Text>
+                    <Text style={styles.confirmBtnText}>
+                      Confirm & Save Cash
+                    </Text>
                   )}
                 </TouchableOpacity>
               )}
@@ -949,19 +1040,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e5e7eb",
   },
+  quickChipActive: {
+    backgroundColor: "#ecfdf5",
+    borderColor: "#00A859",
+    borderWidth: 1.5,
+  },
   quickChipText: {
     fontSize: 13,
     fontWeight: "700",
     color: "#374151",
   },
-  quickChipFull: {
-    backgroundColor: "#fee2e2",
-    borderColor: "#fca5a5",
-  },
-  quickChipFullText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#dc2626",
+  quickChipTextActive: {
+    color: "#00A859",
+    fontWeight: "800",
   },
   buttonRow: {
     flexDirection: "row",
