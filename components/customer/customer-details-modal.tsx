@@ -220,7 +220,31 @@ export function CustomerDetailsModal({
                       <View style={styles.cardTop}>
                         <View>
                           <Text style={styles.cardId}>Loan #{loan.loanId}</Text>
-                          <Text style={styles.cardStatus}>{loan.status}</Text>
+                          <View style={styles.loanStatusBadgeContainer}>
+                            {String(loan.status || "").toUpperCase() === "OVERDUE" ? (
+                              <View style={styles.overdueBadgeModal}>
+                                <Text style={styles.overdueBadgeModalText}>⚠️ OVERDUE</Text>
+                              </View>
+                            ) : String(loan.status || "").toUpperCase() === "ACTIVE" ? (
+                              <View style={styles.activeBadgeModal}>
+                                <Text style={styles.activeBadgeModalText}>● ACTIVE</Text>
+                              </View>
+                            ) : String(loan.status || "").toUpperCase() === "RENEWED" ? (
+                              <View style={styles.renewedBadgeModal}>
+                                <Text style={styles.renewedBadgeModalText}>
+                                  🔄 RENEWED • Rolled Over
+                                </Text>
+                              </View>
+                            ) : String(loan.status || "").toUpperCase() === "COMPLETED" ? (
+                              <View style={styles.completedBadgeModal}>
+                                <Text style={styles.completedBadgeModalText}>
+                                  ✓ COMPLETED
+                                </Text>
+                              </View>
+                            ) : loan.status ? (
+                              <Text style={styles.cardStatus}>{loan.status}</Text>
+                            ) : null}
+                          </View>
                         </View>
                         {(() => {
                           const status = getLoanCollectionStatus(
@@ -253,20 +277,70 @@ export function CustomerDetailsModal({
                             );
                           }
 
+                          const normStatus = String(loan.status || "").toUpperCase();
+                          const isActionable = ["ACTIVE", "OVERDUE"].includes(normStatus) || !loan.status;
+
+                          if (normStatus === "RENEWED") {
+                            return (
+                              <View style={styles.collectMiniButtonDisabledRenewed}>
+                                <Text style={styles.collectMiniTextDisabledRenewed}>
+                                  Rolled Over
+                                </Text>
+                              </View>
+                            );
+                          }
+
+                          if (normStatus === "COMPLETED") {
+                            return (
+                              <View style={styles.collectMiniButtonDisabled}>
+                                <Text style={styles.collectMiniTextDisabled}>
+                                  Fully Settled
+                                </Text>
+                              </View>
+                            );
+                          }
+
+                          if (!isActionable) {
+                            return (
+                              <View style={styles.collectMiniButtonDisabled}>
+                                <Text style={styles.collectMiniTextDisabled}>
+                                  Closed
+                                </Text>
+                              </View>
+                            );
+                          }
+
                           return (
                             <TouchableOpacity
-                              style={styles.collectMiniButton}
+                              style={[
+                                styles.collectMiniButton,
+                                normStatus === "OVERDUE" && styles.collectMiniButtonOverdue,
+                              ]}
                               onPress={() =>
                                 onOpenCollect(customer, "LOAN", loan.loanId)
                               }
                             >
-                              <Text style={styles.collectMiniText}>
-                                + Collect
+                              <Text
+                                style={[
+                                  styles.collectMiniText,
+                                  normStatus === "OVERDUE" && styles.collectMiniTextOverdue,
+                                ]}
+                              >
+                                {normStatus === "OVERDUE" ? "+ Collect Overdue" : "+ Collect"}
                               </Text>
                             </TouchableOpacity>
                           );
                         })()}
                       </View>
+
+                      {/* Overdue maturity notice if overdue */}
+                      {String(loan.status || "").toUpperCase() === "OVERDUE" && loan.endDate ? (
+                        <View style={styles.overdueAlertBanner}>
+                          <Text style={styles.overdueAlertText}>
+                            ⚠️ Matured on: {loan.endDate.split("T")[0]} (Due date passed)
+                          </Text>
+                        </View>
+                      ) : null}
 
                       {/* Loan Figures (Directly from API) */}
                       <View style={styles.figuresGrid}>
@@ -761,6 +835,97 @@ const styles = StyleSheet.create({
     color: "#1e40af",
     fontWeight: "700",
     fontSize: 12,
+  },
+  collectMiniButtonOverdue: {
+    backgroundColor: "#dc2626",
+  },
+  collectMiniTextOverdue: {
+    color: "#fff",
+    fontWeight: "800",
+  },
+  collectMiniButtonDisabledRenewed: {
+    backgroundColor: "#f5f3ff",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#ddd6fe",
+  },
+  collectMiniTextDisabledRenewed: {
+    color: "#7c3aed",
+    fontWeight: "700",
+    fontSize: 12,
+  },
+  loanStatusBadgeContainer: {
+    marginTop: 4,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  overdueBadgeModal: {
+    backgroundColor: "#fef2f2",
+    borderColor: "#fca5a5",
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  overdueBadgeModalText: {
+    color: "#dc2626",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  activeBadgeModal: {
+    backgroundColor: "#ecfdf5",
+    borderColor: "#a7f3d0",
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  activeBadgeModalText: {
+    color: "#059669",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  renewedBadgeModal: {
+    backgroundColor: "#f5f3ff",
+    borderColor: "#ddd6fe",
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  renewedBadgeModalText: {
+    color: "#7c3aed",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  completedBadgeModal: {
+    backgroundColor: "#f1f5f9",
+    borderColor: "#cbd5e1",
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  completedBadgeModalText: {
+    color: "#475569",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  overdueAlertBanner: {
+    backgroundColor: "#fff1f2",
+    borderWidth: 1,
+    borderColor: "#fecdd3",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 12,
+  },
+  overdueAlertText: {
+    color: "#be123c",
+    fontSize: 12,
+    fontWeight: "700",
   },
   figuresGrid: {
     flexDirection: "row",

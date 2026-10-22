@@ -25,6 +25,7 @@ interface CollectCashModalProps {
   customer: CustomerFeedItem | null;
   onClose: () => void;
   onSuccess: () => void;
+  onRefreshFeed?: () => void;
   initialType?: "LOAN" | "PIGMY";
   initialLoanId?: string;
   initialPigmyId?: string;
@@ -35,6 +36,7 @@ export const CollectCashModal = React.memo(function CollectCashModal({
   customer,
   onClose,
   onSuccess,
+  onRefreshFeed,
   initialType,
   initialLoanId,
   initialPigmyId,
@@ -229,6 +231,7 @@ export const CollectCashModal = React.memo(function CollectCashModal({
               );
               setInlineError(displayMsg);
               Alert.alert("Collection Failed", displayMsg);
+              onRefreshFeed?.();
             } finally {
               setLoading(false);
             }
@@ -391,9 +394,26 @@ export const CollectCashModal = React.memo(function CollectCashModal({
             {collectionType === "LOAN" && selectedLoan ? (
               <View style={styles.accountCard}>
                 <View style={styles.cardHeaderRow}>
-                  <Text style={styles.cardIdBadge}>
-                    Loan #{selectedLoan.loanId}
-                  </Text>
+                  <View style={styles.cardIdBadgeRow}>
+                    <Text style={styles.cardIdBadge}>
+                      Loan #{selectedLoan.loanId}
+                    </Text>
+                    {String(selectedLoan.status).toUpperCase() === "OVERDUE" ? (
+                      <View style={styles.overdueBadgeModal}>
+                        <Text style={styles.overdueBadgeModalText}>⚠️ OVERDUE</Text>
+                      </View>
+                    ) : String(selectedLoan.status).toUpperCase() === "ACTIVE" ? (
+                      <View style={styles.activeBadgeModal}>
+                        <Text style={styles.activeBadgeModalText}>● ACTIVE</Text>
+                      </View>
+                    ) : selectedLoan.status ? (
+                      <View style={styles.neutralBadgeModal}>
+                        <Text style={styles.neutralBadgeModalText}>
+                          {selectedLoan.status}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
                   {loanStatus.isPaid ? (
                     loanStatus.isSelf ? (
                       <Text style={[styles.statusPill, styles.statusPillDone]}>
@@ -412,6 +432,14 @@ export const CollectCashModal = React.memo(function CollectCashModal({
                     </Text>
                   )}
                 </View>
+
+                {String(selectedLoan.status).toUpperCase() === "OVERDUE" && selectedLoan.endDate ? (
+                  <View style={styles.overdueAlertBanner}>
+                    <Text style={styles.overdueAlertText}>
+                      ⚠️ Matured on: {selectedLoan.endDate.split("T")[0]} (Due date passed)
+                    </Text>
+                  </View>
+                ) : null}
 
                 {/* Multiple Loans Selector if > 1 */}
                 {activeLoans.length > 1 && (
@@ -871,6 +899,64 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800",
     color: "#1f2937",
+  },
+  cardIdBadgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  overdueBadgeModal: {
+    backgroundColor: "#fef2f2",
+    borderColor: "#fca5a5",
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+  },
+  overdueBadgeModalText: {
+    color: "#dc2626",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  activeBadgeModal: {
+    backgroundColor: "#ecfdf5",
+    borderColor: "#a7f3d0",
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+  },
+  activeBadgeModalText: {
+    color: "#059669",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  neutralBadgeModal: {
+    backgroundColor: "#f1f5f9",
+    borderColor: "#cbd5e1",
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+  },
+  neutralBadgeModalText: {
+    color: "#475569",
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  overdueAlertBanner: {
+    backgroundColor: "#fff1f2",
+    borderWidth: 1,
+    borderColor: "#fecdd3",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 10,
+  },
+  overdueAlertText: {
+    color: "#be123c",
+    fontSize: 11,
+    fontWeight: "700",
   },
   statusPill: {
     fontSize: 11,

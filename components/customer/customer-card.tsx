@@ -72,8 +72,21 @@ export const CustomerCard = React.memo(
       ? item.customerName.charAt(0).toUpperCase()
       : "C";
 
-    const activeLoan = hasLoans ? item.loans[0] : null;
+    // Prioritize OVERDUE or ACTIVE loans so CM sees actionable accounts
+    const activeLoan =
+      item.loans?.find((l) =>
+        ["OVERDUE", "ACTIVE"].includes(String(l.status || "").toUpperCase()),
+      ) ||
+      item.loans?.[0] ||
+      null;
     const activePigmy = hasPigmy ? item.pigmyAccounts[0] : null;
+
+    const isActionableLoan =
+      Boolean(activeLoan) &&
+      (!activeLoan?.status ||
+        ["ACTIVE", "OVERDUE"].includes(
+          String(activeLoan.status).toUpperCase(),
+        ));
 
     // Evaluate statuses using shared utility
     const loanStatus = getLoanCollectionStatus(activeLoan, item, currentCMId);
@@ -84,7 +97,8 @@ export const CustomerCard = React.memo(
     );
     const customerStatus = getCustomerVisitedStatus(item, currentCMId);
 
-    const loanPending = hasLoans ? !loanStatus.isPaid : false;
+    const loanPending =
+      hasLoans && isActionableLoan ? !loanStatus.isPaid : false;
     const pigmyPending = hasPigmy ? !pigmyStatus.isPaid : false;
 
     const handlePrimaryCollect = () => {
@@ -92,7 +106,7 @@ export const CustomerCard = React.memo(
         onCollect(item, "LOAN", activeLoan.loanId);
       } else if (pigmyPending && activePigmy) {
         onCollect(item, "PIGMY", activePigmy.pigmyId);
-      } else if (hasLoans && activeLoan) {
+      } else if (hasLoans && isActionableLoan && activeLoan) {
         onCollect(item, "LOAN", activeLoan.loanId);
       } else if (hasPigmy && activePigmy) {
         onCollect(item, "PIGMY", activePigmy.pigmyId);
@@ -100,10 +114,13 @@ export const CustomerCard = React.memo(
     };
 
     const getCollectButtonText = () => {
+      const isOverdue = String(activeLoan?.status).toUpperCase() === "OVERDUE";
       if (loanPending && pigmyPending) return "+ Collect Cash";
-      if (loanPending) return "+ Collect Loan Cash";
+      if (loanPending)
+        return isOverdue ? "+ Collect Overdue" : "+ Collect Loan Cash";
       if (pigmyPending) return "+ Collect Pigmy Cash";
-      if (hasLoans) return "+ Collect Loan Cash";
+      if (hasLoans && isActionableLoan)
+        return isOverdue ? "+ Collect Overdue" : "+ Collect Loan Cash";
       if (hasPigmy) return "+ Collect Pigmy Cash";
       return "+ Collect Cash";
     };
@@ -174,14 +191,24 @@ export const CustomerCard = React.memo(
               </Text>
             </View>
 
-            <View style={styles.dateBadge}>
-              <Text style={styles.dateBadgeLabel}>End Date: </Text>
-              <Text style={styles.dateBadgeValue}>
-                {formatLoanDate(activeLoan.endDate)}
-              </Text>
-            </View>
+            {String(activeLoan.status).toUpperCase() === "OVERDUE" ? (
+              <View style={[styles.dateBadge, styles.dateBadgeOverdue]}>
+                <Text style={styles.dateBadgeLabelOverdue}>⚠️ Matured: </Text>
+                <Text style={styles.dateBadgeValueOverdue}>
+                  {formatLoanDate(activeLoan.endDate)} (Due date passed)
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.dateBadge}>
+                <Text style={styles.dateBadgeLabel}>End Date: </Text>
+                <Text style={styles.dateBadgeValue}>
+                  {formatLoanDate(activeLoan.endDate)}
+                </Text>
+              </View>
+            )}
           </View>
-        ) : activePigmy && (activePigmy.startDate || activePigmy.maturityDate) ? (
+        ) : activePigmy &&
+          (activePigmy.startDate || activePigmy.maturityDate) ? (
           <View style={styles.loanDatesRow}>
             <View style={styles.dateBadge}>
               <Text style={styles.dateBadgeLabel}>Start Date: </Text>
@@ -205,7 +232,31 @@ export const CustomerCard = React.memo(
             {hasLoans && activeLoan && (
               <View style={styles.accountPill}>
                 <View style={styles.pillTextWrap}>
-                  <Text style={styles.pillLabel}>Loan: {activeLoan.loanId}</Text>
+                  <View style={styles.loanIdStatusRow}>
+                    <Text style={styles.pillLabel}>
+                      Loan: {activeLoan.loanId}
+                    </Text>
+                    {String(activeLoan.status).toUpperCase() === "OVERDUE" ? (
+                      <View style={styles.overdueBadge}>
+                        <Text style={styles.overdueBadgeText}>⚠️ OVERDUE</Text>
+                      </View>
+                    ) : String(activeLoan.status).toUpperCase() === "ACTIVE" ? (
+                      <View style={styles.activeBadge}>
+                        <Text style={styles.activeBadgeText}>● ACTIVE</Text>
+                      </View>
+                    ) : String(activeLoan.status).toUpperCase() ===
+                      "RENEWED" ? (
+                      <View style={styles.renewedBadge}>
+                        <Text style={styles.renewedBadgeText}>🔄 RENEWED</Text>
+                      </View>
+                    ) : activeLoan.status ? (
+                      <View style={styles.neutralStatusBadge}>
+                        <Text style={styles.neutralStatusText}>
+                          {activeLoan.status}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
                   <Text style={styles.pillValueRed}>
                     ₹{activeLoan.pendingAmount?.toLocaleString("en-IN") || "0"}{" "}
                     Due
@@ -216,7 +267,7 @@ export const CustomerCard = React.memo(
                   loanStatus.isSelf ? (
                     <View style={styles.pillStatusDoneBox}>
                       <Text style={styles.pillStatusDoneText}>
-                        ✅ Today Collection Collected
+                        ✅ Collected
                         {loanStatus.collectedAmount > 0
                           ? ` (₹${loanStatus.collectedAmount})`
                           : ""}
@@ -229,13 +280,35 @@ export const CustomerCard = React.memo(
                       </Text>
                     </View>
                   )
-                ) : (
+                ) : isActionableLoan ? (
                   <TouchableOpacity
-                    style={styles.pillActionBtn}
+                    style={[
+                      styles.pillActionBtn,
+                      String(activeLoan.status).toUpperCase() === "OVERDUE" &&
+                        styles.pillActionBtnOverdue,
+                    ]}
                     onPress={() => onCollect(item, "LOAN", activeLoan.loanId)}
                   >
-                    <Text style={styles.pillActionBtnText}>Collect Loan</Text>
+                    <Text
+                      style={[
+                        styles.pillActionBtnText,
+                        String(activeLoan.status).toUpperCase() === "OVERDUE" &&
+                          styles.pillActionBtnTextOverdue,
+                      ]}
+                    >
+                      {String(activeLoan.status).toUpperCase() === "OVERDUE"
+                        ? "Collect Overdue"
+                        : "Collect Loan"}
+                    </Text>
                   </TouchableOpacity>
+                ) : (
+                  <View style={styles.pillStatusClosedBox}>
+                    <Text style={styles.pillStatusClosedText}>
+                      {String(activeLoan.status).toUpperCase() === "RENEWED"
+                        ? "Rolled Over"
+                        : "Closed"}
+                    </Text>
+                  </View>
                 )}
               </View>
             )}
@@ -248,7 +321,8 @@ export const CustomerCard = React.memo(
                   </Text>
                   <Text style={styles.pillValueGreen}>
                     ₹
-                    {activePigmy.totalSavedAmount?.toLocaleString("en-IN") || "0"}{" "}
+                    {activePigmy.totalSavedAmount?.toLocaleString("en-IN") ||
+                      "0"}{" "}
                     Saved
                   </Text>
                 </View>
@@ -273,7 +347,9 @@ export const CustomerCard = React.memo(
                 ) : (
                   <TouchableOpacity
                     style={styles.pillActionBtnPigmy}
-                    onPress={() => onCollect(item, "PIGMY", activePigmy.pigmyId)}
+                    onPress={() =>
+                      onCollect(item, "PIGMY", activePigmy.pigmyId)
+                    }
                   >
                     <Text style={styles.pillActionBtnText}>Collect Pigmy</Text>
                   </TouchableOpacity>
@@ -603,5 +679,94 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "800",
     color: "#0f172a",
+  },
+  dateBadgeOverdue: {
+    backgroundColor: "#fff1f2",
+    borderColor: "#fecdd3",
+  },
+  dateBadgeLabelOverdue: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#e11d48",
+  },
+  dateBadgeValueOverdue: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#be123c",
+  },
+  loanIdStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexWrap: "wrap",
+  },
+  overdueBadge: {
+    backgroundColor: "#fef2f2",
+    borderColor: "#fca5a5",
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+  },
+  overdueBadgeText: {
+    color: "#dc2626",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  activeBadge: {
+    backgroundColor: "#ecfdf5",
+    borderColor: "#a7f3d0",
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+  },
+  activeBadgeText: {
+    color: "#059669",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  renewedBadge: {
+    backgroundColor: "#f5f3ff",
+    borderColor: "#ddd6fe",
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+  },
+  renewedBadgeText: {
+    color: "#7c3aed",
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  neutralStatusBadge: {
+    backgroundColor: "#f1f5f9",
+    borderColor: "#cbd5e1",
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+  },
+  neutralStatusText: {
+    color: "#475569",
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  pillActionBtnOverdue: {
+    backgroundColor: "#fee2e2",
+  },
+  pillActionBtnTextOverdue: {
+    color: "#b91c1c",
+  },
+  pillStatusClosedBox: {
+    backgroundColor: "#f1f5f9",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  pillStatusClosedText: {
+    color: "#64748b",
+    fontSize: 11,
+    fontWeight: "700",
   },
 });

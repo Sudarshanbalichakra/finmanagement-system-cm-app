@@ -1,12 +1,21 @@
+export interface Assurity {
+  name: string | null;
+  mobile?: string | number | null;
+  relationship?: string | null;
+}
+
 export interface LoanItem {
   loanId: string;
   loanAmount: number;
+  interestRate?: number;
+  durationMonths?: number;
   disbursedCash?: number;
   repaymentAmount: number;
   pendingAmount: number;
   startDate?: string;
   endDate?: string;
-  status: "ACTIVE" | "COMPLETED" | "DEFAULTED" | string;
+  status: "ACTIVE" | "OVERDUE" | "COMPLETED" | "RENEWED" | "DEFAULTED" | string;
+  assurity?: Assurity;
   isPaid?: boolean;
   todayCollected?: boolean;
   todayCollectionAmount?: number;
@@ -16,7 +25,14 @@ export interface LoanItem {
 
 export interface PigmyAccountItem {
   pigmyId: string;
+  schemeId?: string;
+  schemeName?: string;
+  duration?: number;
+  durationUnit?: "DAYS" | "MONTHS" | string;
+  depositMode?: "FLEXIBLE" | "FIXED" | string;
+  depositFrequency?: "DAILY" | "WEEKLY" | "MONTHLY" | string;
   startDate?: string;
+  maturityDate?: string;
   totalSavedAmount: number;
   status: "ACTIVE" | "MATURED" | "CLOSED" | string;
   isPaid?: boolean;

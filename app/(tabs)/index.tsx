@@ -36,7 +36,7 @@ import { getCustomerVisitedStatus } from "@/utils/collection-status";
 import { getFriendlyErrorMessage } from "@/utils/error-handler";
 import { checkNetworkConnectivity } from "@/utils/network";
 
-type FilterType = "ALL" | "PENDING" | "VISITED" | "LOANS" | "PIGMY";
+type FilterType = "ALL" | "OVERDUE" | "PENDING" | "VISITED" | "LOANS" | "PIGMY";
 
 export default function HomeScreen() {
   const user = useAuthStore((state) => state.user);
@@ -366,6 +366,14 @@ export default function HomeScreen() {
       const status = getCustomerVisitedStatus(c, currentCMId);
 
       // Filter category match
+      if (activeFilter === "OVERDUE") {
+        return Boolean(
+          c.loans &&
+            c.loans.some(
+              (l) => String(l.status || "").toUpperCase() === "OVERDUE",
+            ),
+        );
+      }
       if (activeFilter === "PENDING") {
         return !status.isVisited;
       }
@@ -383,6 +391,15 @@ export default function HomeScreen() {
       return true;
     });
   }, [feedData?.customers, deferredSearchQuery, activeFilter, currentCMId]);
+
+  const overdueCount = useMemo(() => {
+    if (!feedData?.customers) return 0;
+    return feedData.customers.filter((c) =>
+      c.loans?.some(
+        (l) => String(l.status || "").toUpperCase() === "OVERDUE",
+      ),
+    ).length;
+  }, [feedData?.customers]);
 
   const stats: MobileFeedStats = useMemo(() => {
     return (
@@ -526,6 +543,25 @@ export default function HomeScreen() {
               ]}
             >
               All ({feedData?.customers?.length || 0})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.filterChip,
+              overdueCount > 0 && styles.filterChipOverduePending,
+              activeFilter === "OVERDUE" && styles.filterChipOverdueActive,
+            ]}
+            onPress={() => setActiveFilter("OVERDUE")}
+          >
+            <Text
+              style={[
+                styles.filterChipText,
+                overdueCount > 0 && styles.filterChipTextOverduePending,
+                activeFilter === "OVERDUE" && styles.filterChipTextOverdueActive,
+              ]}
+            >
+              ⚠️ Overdue ({overdueCount})
             </Text>
           </TouchableOpacity>
 
@@ -700,6 +736,7 @@ export default function HomeScreen() {
         initialPigmyId={initialTargetId}
         onClose={handleCloseCollect}
         onSuccess={handleCollectSuccess}
+        onRefreshFeed={() => fetchFeed(true)}
       />
 
       {/* Customer Passbook Modal */}
@@ -879,6 +916,22 @@ const styles = StyleSheet.create({
   },
   filterChipTextActive: {
     color: "#fff",
+  },
+  filterChipOverduePending: {
+    borderColor: "#fca5a5",
+    backgroundColor: "#fff5f5",
+  },
+  filterChipTextOverduePending: {
+    color: "#dc2626",
+    fontWeight: "700",
+  },
+  filterChipOverdueActive: {
+    backgroundColor: "#dc2626",
+    borderColor: "#dc2626",
+  },
+  filterChipTextOverdueActive: {
+    color: "#fff",
+    fontWeight: "800",
   },
   loadingContainer: {
     flex: 1,
