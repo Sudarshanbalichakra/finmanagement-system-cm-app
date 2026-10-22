@@ -9,6 +9,38 @@ import React from "react";
 import { StyleSheet, TouchableOpacity, View } from "react-native";
 import { Text } from "react-native-paper";
 
+function formatLoanDate(dateStr?: string | null): string {
+  if (!dateStr) return "N/A";
+  try {
+    const cleanStr = dateStr.split("T")[0];
+    const parts = cleanStr.split("-");
+    if (parts.length === 3) {
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      const d = new Date(year, month, day);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleDateString("en-IN", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        });
+      }
+    }
+    const d = new Date(dateStr);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
+    }
+    return cleanStr;
+  } catch {
+    return dateStr.split("T")[0] || dateStr;
+  }
+}
+
 interface CustomerCardProps {
   item: CustomerFeedItem;
   onPress: (item: CustomerFeedItem) => void;
@@ -130,6 +162,41 @@ export const CustomerCard = React.memo(
           <Text style={styles.addressText} numberOfLines={1}>
             📍 {item.address}
           </Text>
+        ) : null}
+
+        {/* Loan Dates (Replacing KYC photo & ID badges) */}
+        {activeLoan && (activeLoan.startDate || activeLoan.endDate) ? (
+          <View style={styles.loanDatesRow}>
+            <View style={styles.dateBadge}>
+              <Text style={styles.dateBadgeLabel}>Start Date: </Text>
+              <Text style={styles.dateBadgeValue}>
+                {formatLoanDate(activeLoan.startDate)}
+              </Text>
+            </View>
+
+            <View style={styles.dateBadge}>
+              <Text style={styles.dateBadgeLabel}>End Date: </Text>
+              <Text style={styles.dateBadgeValue}>
+                {formatLoanDate(activeLoan.endDate)}
+              </Text>
+            </View>
+          </View>
+        ) : activePigmy && (activePigmy.startDate || activePigmy.maturityDate) ? (
+          <View style={styles.loanDatesRow}>
+            <View style={styles.dateBadge}>
+              <Text style={styles.dateBadgeLabel}>Start Date: </Text>
+              <Text style={styles.dateBadgeValue}>
+                {formatLoanDate(activePigmy.startDate)}
+              </Text>
+            </View>
+
+            <View style={styles.dateBadge}>
+              <Text style={styles.dateBadgeLabel}>End Date: </Text>
+              <Text style={styles.dateBadgeValue}>
+                {formatLoanDate(activePigmy.maturityDate)}
+              </Text>
+            </View>
+          </View>
         ) : null}
 
         {/* Account Details Pills */}
@@ -509,5 +576,32 @@ const styles = StyleSheet.create({
     color: "#1e40af",
     fontWeight: "700",
     fontSize: 12,
+  },
+  loanDatesRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 8,
+    flexWrap: "wrap",
+  },
+  dateBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  dateBadgeLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+  dateBadgeValue: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#0f172a",
   },
 });

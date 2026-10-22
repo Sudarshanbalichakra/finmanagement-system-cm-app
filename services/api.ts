@@ -12,6 +12,7 @@ import {
   RecordPigmyCollectionPayload,
 } from "@/types/cm.types";
 import axios, { AxiosError } from "axios";
+import { Platform } from "react-native";
 
 const BASE_URL =
   process.env.EXPO_PUBLIC_API_URL || "http://192.168.1.10:3000/api";
@@ -342,6 +343,69 @@ export const MobileApi = {
       }
       return null;
     }
+  },
+
+  /**
+   * 8. Update Customer Photos (Portrait & ID Proof)
+   * PUT /customers/:customerId/photos
+   * Content-Type: multipart/form-data
+   */
+  updateCustomerPhotos: async (
+    customerId: string,
+    photos: {
+      customerPhoto?: { uri: string; name?: string; type?: string };
+      idProofPhoto?: { uri: string; name?: string; type?: string };
+    },
+  ): Promise<{ success: boolean; message: string; data?: any }> => {
+    const formData = new FormData();
+
+    if (photos.customerPhoto) {
+      const uri = photos.customerPhoto.uri;
+      const filename =
+        photos.customerPhoto.name ||
+        uri.split("/").pop() ||
+        `customer_${Date.now()}.jpg`;
+      const match = /\.(\w+)$/.exec(filename);
+      const type =
+        photos.customerPhoto.type ||
+        (match ? `image/${match[1]}` : "image/jpeg");
+
+      formData.append("customerPhoto", {
+        uri: Platform.OS === "android" ? uri : uri.replace("file://", ""),
+        name: filename,
+        type,
+      } as any);
+    }
+
+    if (photos.idProofPhoto) {
+      const uri = photos.idProofPhoto.uri;
+      const filename =
+        photos.idProofPhoto.name ||
+        uri.split("/").pop() ||
+        `id_proof_${Date.now()}.jpg`;
+      const match = /\.(\w+)$/.exec(filename);
+      const type =
+        photos.idProofPhoto.type ||
+        (match ? `image/${match[1]}` : "image/jpeg");
+
+      formData.append("idProofPhoto", {
+        uri: Platform.OS === "android" ? uri : uri.replace("file://", ""),
+        name: filename,
+        type,
+      } as any);
+    }
+
+    const response = await apiClient.put(
+      `/customers/${customerId}/photos`,
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      },
+    );
+
+    return response.data;
   },
 };
 

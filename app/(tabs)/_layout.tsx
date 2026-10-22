@@ -47,6 +47,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="kyc"
+        options={{
+          title: 'Customer KYC',
+          tabBarIcon: ({ color }) => <IconSymbol size={24} name="person.crop.rectangle.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="summary"
         options={{
           title: 'Day Close',

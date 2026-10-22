@@ -285,7 +285,7 @@ export function CustomerDetailsModal({
                         <View style={styles.figBox}>
                           <Text style={styles.figLabel}>Disbursed</Text>
                           <Text style={styles.figVal}>
-                            ₹{loan.loanAmount.toLocaleString("en-IN")}
+                            ₹{loan.disbursedCash?.toLocaleString("en-IN")}
                           </Text>
                         </View>
                         <View style={styles.figBox}>
@@ -388,9 +388,6 @@ export function CustomerDetailsModal({
                           <Text style={styles.cardId}>
                             Pigmy #{pigmy.pigmyId}
                           </Text>
-                          <Text style={styles.cardScheme}>
-                            {pigmy.schemeName || "Daily Savings"}
-                          </Text>
                         </View>
                         {(() => {
                           const status = getPigmyCollectionStatus(
@@ -444,12 +441,6 @@ export function CustomerDetailsModal({
                           <Text style={styles.figLabel}>Total Saved</Text>
                           <Text style={styles.figValGreen}>
                             ₹{pigmy.totalSavedAmount.toLocaleString("en-IN")}
-                          </Text>
-                        </View>
-                        <View style={styles.figBox}>
-                          <Text style={styles.figLabel}>Duration</Text>
-                          <Text style={styles.figVal}>
-                            {pigmy.duration} {pigmy.durationUnit || "Days"}
                           </Text>
                         </View>
                         <View style={styles.figBox}>

@@ -1,5 +1,5 @@
 {
-  "name": "porter_clone",
+  "name": "CM App",
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
@@ -23,6 +23,8 @@
     "expo-font": "~14.0.12",
     "expo-haptics": "~15.0.8",
     "expo-image": "~3.0.11",
+    "expo-image-manipulator": "~14.0.8",
+    "expo-image-picker": "~17.0.11",
     "expo-linking": "~8.0.12",
     "expo-network": "~8.0.8",
     "expo-router": "~6.0.24",

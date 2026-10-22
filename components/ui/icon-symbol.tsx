@@ -23,6 +23,7 @@ const MAPPING = {
   'list.bullet.clipboard.fill': 'assignment',
   'dollarsign.circle.fill': 'paid',
   'receipt.fill': 'receipt',
+  'person.crop.rectangle.fill': 'badge',
 } as IconMapping;
 
 /**
