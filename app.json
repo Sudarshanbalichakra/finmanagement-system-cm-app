@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "porter_clone",
-    "slug": "porter_clone",
+    "name": "CM App",
+    "slug": "cm-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -19,7 +19,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.sudu1103.cmapp"
     },
     "web": {
       "output": "static",
@@ -44,6 +45,18 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "f4cfdebc-4e23-4aed-b7e1-7c6424cb7a76"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/f4cfdebc-4e23-4aed-b7e1-7c6424cb7a76"
     }
   }
 }
