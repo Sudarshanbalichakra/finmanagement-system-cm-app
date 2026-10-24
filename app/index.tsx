@@ -47,7 +47,7 @@ export default function SplashScreen() {
             COLLECTION MANAGER
           </Text>
           <Text variant="displaySmall" style={styles.brandTitle}>
-            Finance Portal
+            Sufisys
           </Text>
           <Text variant="bodyMedium" style={styles.brandTagline}>
             Smart, secure loan & collection operations

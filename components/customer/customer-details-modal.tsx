@@ -10,7 +10,7 @@ import {
   getPigmyCollectionStatus,
 } from "@/utils/collection-status";
 import { getFriendlyErrorMessage } from "@/utils/error-handler";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Linking,
@@ -56,44 +56,45 @@ export function CustomerDetailsModal({
       error?: string;
     };
   }>({});
+  const [expandedLedgers, setExpandedLedgers] = useState<{
+    [id: string]: boolean;
+  }>({});
 
-  useEffect(() => {
-    if (customer && visible) {
-      if (customer.loans && customer.loans.length > 0) {
-        setActiveTab("LOANS");
-      } else if (customer.pigmyAccounts && customer.pigmyAccounts.length > 0) {
-        setActiveTab("PIGMY");
-      } else {
-        setActiveTab("LOANS");
-      }
-    }
-  }, [customer, visible]);
-
-  if (!customer) return null;
-
-  const handleCall = (phone?: string) => {
-    if (!phone) return;
-    Linking.openURL(`tel:${phone}`);
-  };
-
-  const loadLoanLedger = async (loanId: string) => {
+  const loadLoanLedger = useCallback(async (loanId: string) => {
     setLoanLedgers((prev) => ({
       ...prev,
-      [loanId]: { loading: true, items: prev[loanId]?.items || [] },
+      [loanId]: {
+        loading: true,
+        items: prev[loanId]?.items || [],
+        error: undefined,
+      },
     }));
 
     try {
       const res = await MobileApi.getLoanCollectionsLedger(loanId);
+      const rawItems = Array.isArray(res)
+        ? res
+        : Array.isArray((res as any)?.data)
+        ? (res as any).data
+        : [];
+
+      // Sort newest collections first so today's collection is visible right at the top
+      const sortedItems = [...rawItems].sort((a, b) => {
+        const timeA = new Date(a.collectionDate || a.createdAt || 0).getTime();
+        const timeB = new Date(b.collectionDate || b.createdAt || 0).getTime();
+        return timeB - timeA;
+      });
+
       setLoanLedgers((prev) => ({
         ...prev,
-        [loanId]: { loading: false, items: res.data || [] },
+        [loanId]: { loading: false, items: sortedItems, error: undefined },
       }));
     } catch (err: any) {
       setLoanLedgers((prev) => ({
         ...prev,
         [loanId]: {
           loading: false,
-          items: [],
+          items: prev[loanId]?.items || [],
           error: getFriendlyErrorMessage(
             err,
             "Unable to load collection ledger history.",
@@ -101,26 +102,43 @@ export function CustomerDetailsModal({
         },
       }));
     }
-  };
+  }, []);
 
-  const loadPigmyLedger = async (pigmyId: string) => {
+  const loadPigmyLedger = useCallback(async (pigmyId: string) => {
     setPigmyLedgers((prev) => ({
       ...prev,
-      [pigmyId]: { loading: true, items: prev[pigmyId]?.items || [] },
+      [pigmyId]: {
+        loading: true,
+        items: prev[pigmyId]?.items || [],
+        error: undefined,
+      },
     }));
 
     try {
       const res = await MobileApi.getPigmyCollectionsLedger(pigmyId);
+      const rawItems = Array.isArray(res)
+        ? res
+        : Array.isArray((res as any)?.data)
+        ? (res as any).data
+        : [];
+
+      // Sort newest collections first
+      const sortedItems = [...rawItems].sort((a, b) => {
+        const timeA = new Date(a.collectionDate || a.createdAt || 0).getTime();
+        const timeB = new Date(b.collectionDate || b.createdAt || 0).getTime();
+        return timeB - timeA;
+      });
+
       setPigmyLedgers((prev) => ({
         ...prev,
-        [pigmyId]: { loading: false, items: res.data || [] },
+        [pigmyId]: { loading: false, items: sortedItems, error: undefined },
       }));
     } catch (err: any) {
       setPigmyLedgers((prev) => ({
         ...prev,
         [pigmyId]: {
           loading: false,
-          items: [],
+          items: prev[pigmyId]?.items || [],
           error: getFriendlyErrorMessage(
             err,
             "Unable to load pigmy passbook history.",
@@ -128,6 +146,63 @@ export function CustomerDetailsModal({
         },
       }));
     }
+  }, []);
+
+  // Collapse all ledgers when modal closes
+  useEffect(() => {
+    if (!visible) {
+      setExpandedLedgers({});
+    }
+  }, [visible]);
+
+  // Set default tab when modal opens (does NOT auto-fetch or auto-show ledgers)
+  useEffect(() => {
+    if (customer && visible) {
+      const hasLoans = Boolean(customer.loans && customer.loans.length > 0);
+      const hasPigmy = Boolean(
+        customer.pigmyAccounts && customer.pigmyAccounts.length > 0,
+      );
+
+      if (hasLoans) {
+        setActiveTab("LOANS");
+      } else if (hasPigmy) {
+        setActiveTab("PIGMY");
+      } else {
+        setActiveTab("LOANS");
+      }
+    }
+  }, [customer?.customerId, visible]);
+
+  const handleSelectTab = (tab: "LOANS" | "PIGMY") => {
+    setActiveTab(tab);
+  };
+
+  // Explicitly fetch and show ledger only when user taps on ledger history
+  const handleToggleLoanLedger = (loanId: string) => {
+    const isCurrentlyOpen = Boolean(expandedLedgers[loanId]);
+    if (!isCurrentlyOpen) {
+      loadLoanLedger(loanId);
+      setExpandedLedgers((prev) => ({ ...prev, [loanId]: true }));
+    } else {
+      setExpandedLedgers((prev) => ({ ...prev, [loanId]: false }));
+    }
+  };
+
+  const handleTogglePigmyLedger = (pigmyId: string) => {
+    const isCurrentlyOpen = Boolean(expandedLedgers[pigmyId]);
+    if (!isCurrentlyOpen) {
+      loadPigmyLedger(pigmyId);
+      setExpandedLedgers((prev) => ({ ...prev, [pigmyId]: true }));
+    } else {
+      setExpandedLedgers((prev) => ({ ...prev, [pigmyId]: false }));
+    }
+  };
+
+  if (!customer) return null;
+
+  const handleCall = (phone?: string) => {
+    if (!phone) return;
+    Linking.openURL(`tel:${phone}`);
   };
 
   return (
@@ -182,7 +257,7 @@ export function CustomerDetailsModal({
           <View style={styles.tabRow}>
             <TouchableOpacity
               style={[styles.tab, activeTab === "LOANS" && styles.tabActive]}
-              onPress={() => setActiveTab("LOANS")}
+              onPress={() => handleSelectTab("LOANS")}
             >
               <Text
                 style={[
@@ -196,7 +271,7 @@ export function CustomerDetailsModal({
 
             <TouchableOpacity
               style={[styles.tab, activeTab === "PIGMY" && styles.tabActive]}
-              onPress={() => setActiveTab("PIGMY")}
+              onPress={() => handleSelectTab("PIGMY")}
             >
               <Text
                 style={[
@@ -221,28 +296,38 @@ export function CustomerDetailsModal({
                         <View>
                           <Text style={styles.cardId}>Loan #{loan.loanId}</Text>
                           <View style={styles.loanStatusBadgeContainer}>
-                            {String(loan.status || "").toUpperCase() === "OVERDUE" ? (
+                            {String(loan.status || "").toUpperCase() ===
+                            "OVERDUE" ? (
                               <View style={styles.overdueBadgeModal}>
-                                <Text style={styles.overdueBadgeModalText}>⚠️ OVERDUE</Text>
+                                <Text style={styles.overdueBadgeModalText}>
+                                  ⚠️ OVERDUE
+                                </Text>
                               </View>
-                            ) : String(loan.status || "").toUpperCase() === "ACTIVE" ? (
+                            ) : String(loan.status || "").toUpperCase() ===
+                              "ACTIVE" ? (
                               <View style={styles.activeBadgeModal}>
-                                <Text style={styles.activeBadgeModalText}>● ACTIVE</Text>
+                                <Text style={styles.activeBadgeModalText}>
+                                  ● ACTIVE
+                                </Text>
                               </View>
-                            ) : String(loan.status || "").toUpperCase() === "RENEWED" ? (
+                            ) : String(loan.status || "").toUpperCase() ===
+                              "RENEWED" ? (
                               <View style={styles.renewedBadgeModal}>
                                 <Text style={styles.renewedBadgeModalText}>
                                   🔄 RENEWED • Rolled Over
                                 </Text>
                               </View>
-                            ) : String(loan.status || "").toUpperCase() === "COMPLETED" ? (
+                            ) : String(loan.status || "").toUpperCase() ===
+                              "COMPLETED" ? (
                               <View style={styles.completedBadgeModal}>
                                 <Text style={styles.completedBadgeModalText}>
                                   ✓ COMPLETED
                                 </Text>
                               </View>
                             ) : loan.status ? (
-                              <Text style={styles.cardStatus}>{loan.status}</Text>
+                              <Text style={styles.cardStatus}>
+                                {loan.status}
+                              </Text>
                             ) : null}
                           </View>
                         </View>
@@ -277,13 +362,21 @@ export function CustomerDetailsModal({
                             );
                           }
 
-                          const normStatus = String(loan.status || "").toUpperCase();
-                          const isActionable = ["ACTIVE", "OVERDUE"].includes(normStatus) || !loan.status;
+                          const normStatus = String(
+                            loan.status || "",
+                          ).toUpperCase();
+                          const isActionable =
+                            ["ACTIVE", "OVERDUE"].includes(normStatus) ||
+                            !loan.status;
 
                           if (normStatus === "RENEWED") {
                             return (
-                              <View style={styles.collectMiniButtonDisabledRenewed}>
-                                <Text style={styles.collectMiniTextDisabledRenewed}>
+                              <View
+                                style={styles.collectMiniButtonDisabledRenewed}
+                              >
+                                <Text
+                                  style={styles.collectMiniTextDisabledRenewed}
+                                >
                                   Rolled Over
                                 </Text>
                               </View>
@@ -314,7 +407,8 @@ export function CustomerDetailsModal({
                             <TouchableOpacity
                               style={[
                                 styles.collectMiniButton,
-                                normStatus === "OVERDUE" && styles.collectMiniButtonOverdue,
+                                normStatus === "OVERDUE" &&
+                                  styles.collectMiniButtonOverdue,
                               ]}
                               onPress={() =>
                                 onOpenCollect(customer, "LOAN", loan.loanId)
@@ -323,10 +417,13 @@ export function CustomerDetailsModal({
                               <Text
                                 style={[
                                   styles.collectMiniText,
-                                  normStatus === "OVERDUE" && styles.collectMiniTextOverdue,
+                                  normStatus === "OVERDUE" &&
+                                    styles.collectMiniTextOverdue,
                                 ]}
                               >
-                                {normStatus === "OVERDUE" ? "+ Collect Overdue" : "+ Collect"}
+                                {normStatus === "OVERDUE"
+                                  ? "+ Collect Overdue"
+                                  : "+ Collect"}
                               </Text>
                             </TouchableOpacity>
                           );
@@ -334,10 +431,12 @@ export function CustomerDetailsModal({
                       </View>
 
                       {/* Overdue maturity notice if overdue */}
-                      {String(loan.status || "").toUpperCase() === "OVERDUE" && loan.endDate ? (
+                      {String(loan.status || "").toUpperCase() === "OVERDUE" &&
+                      loan.endDate ? (
                         <View style={styles.overdueAlertBanner}>
                           <Text style={styles.overdueAlertText}>
-                            ⚠️ Matured on: {loan.endDate.split("T")[0]} (Due date passed)
+                            ⚠️ Matured on: {loan.endDate.split("T")[0]} (Due
+                            date passed)
                           </Text>
                         </View>
                       ) : null}
@@ -393,51 +492,104 @@ export function CustomerDetailsModal({
                       ) : null}
 
                       {/* Ledger Accordion */}
-                      <TouchableOpacity
-                        style={styles.ledgerToggle}
-                        onPress={() => {
-                          if (!ledger?.items?.length) {
-                            loadLoanLedger(loan.loanId);
-                          }
-                        }}
-                      >
-                        <Text style={styles.ledgerToggleText}>
-                          📖 Collection Ledger History
-                        </Text>
-                      </TouchableOpacity>
+                      {(() => {
+                        const isExpanded = Boolean(expandedLedgers[loan.loanId]);
+                        return (
+                          <>
+                            <TouchableOpacity
+                              style={styles.ledgerToggle}
+                              onPress={() => handleToggleLoanLedger(loan.loanId)}
+                              activeOpacity={0.7}
+                            >
+                              <View style={styles.ledgerToggleInner}>
+                                <Text style={styles.ledgerToggleText}>
+                                  📖 Collection Ledger History
+                                  {isExpanded && ledger?.items && ledger.items.length > 0
+                                    ? ` (${ledger.items.length})`
+                                    : ""}
+                                </Text>
+                                <View style={styles.ledgerActionGroup}>
+                                  {isExpanded && (
+                                    <TouchableOpacity
+                                      style={styles.ledgerRefreshBadge}
+                                      onPress={(e) => {
+                                        e.stopPropagation();
+                                        loadLoanLedger(loan.loanId);
+                                      }}
+                                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                                    >
+                                      <Text style={styles.ledgerRefreshText}>🔄 Refresh</Text>
+                                    </TouchableOpacity>
+                                  )}
+                                  <Text style={styles.ledgerChevron}>
+                                    {isExpanded ? "▲" : "▼"}
+                                  </Text>
+                                </View>
+                              </View>
+                            </TouchableOpacity>
 
-                      {ledger?.loading && (
-                        <ActivityIndicator
-                          style={{ marginVertical: 8 }}
-                          color="#00A859"
-                        />
-                      )}
+                            {isExpanded && (
+                              <>
+                                {ledger?.loading && (
+                                  <ActivityIndicator
+                                    style={{ marginVertical: 8 }}
+                                    color="#00A859"
+                                  />
+                                )}
 
-                      {ledger?.items && ledger.items.length > 0 && (
-                        <View style={styles.ledgerList}>
-                          {ledger.items.map((item, idx) => (
-                            <View key={idx} style={styles.ledgerRow}>
-                              <Text style={styles.ledgerDate}>
-                                {item.collectionDate}
-                              </Text>
-                              <Text style={styles.ledgerAmount}>
-                                +₹{item.amount.toLocaleString("en-IN")}
-                              </Text>
-                              <Text style={styles.ledgerStatus}>
-                                {item.approvalStatus || "Approved"}
-                              </Text>
-                            </View>
-                          ))}
-                        </View>
-                      )}
+                                {ledger?.error && !ledger.loading && (
+                                  <View style={styles.ledgerErrorBox}>
+                                    <Text style={styles.ledgerErrorText}>⚠️ {ledger.error}</Text>
+                                    <TouchableOpacity
+                                      style={styles.ledgerRetryBtn}
+                                      onPress={() => loadLoanLedger(loan.loanId)}
+                                    >
+                                      <Text style={styles.ledgerRetryBtnText}>Retry</Text>
+                                    </TouchableOpacity>
+                                  </View>
+                                )}
 
-                      {ledger?.items &&
-                        ledger.items.length === 0 &&
-                        !ledger.loading && (
-                          <Text style={styles.emptyLedgerText}>
-                            No collection history recorded yet for this loan.
-                          </Text>
-                        )}
+                                {ledger?.items && ledger.items.length > 0 && (
+                                  <View style={styles.ledgerList}>
+                                    {ledger.items.map((item, idx) => {
+                                      const rawDateStr = item.collectionDate || item.createdAt;
+                                      const cleanDate = rawDateStr ? String(rawDateStr).split("T")[0] : "N/A";
+                                      const isToday = cleanDate === new Date().toISOString().split("T")[0];
+
+                                      return (
+                                        <View key={item.collectionId || item._id || idx} style={styles.ledgerRow}>
+                                          <View style={styles.ledgerDateWrap}>
+                                            <Text style={styles.ledgerDate}>
+                                              {cleanDate}
+                                            </Text>
+                                            {isToday && (
+                                              <View style={styles.todayPill}>
+                                                <Text style={styles.todayPillText}>Today</Text>
+                                              </View>
+                                            )}
+                                          </View>
+                                          <Text style={styles.ledgerAmount}>
+                                            +₹{item.amount.toLocaleString("en-IN")}
+                                          </Text>
+                                        </View>
+                                      );
+                                    })}
+                                  </View>
+                                )}
+
+                                {ledger?.items &&
+                                  ledger.items.length === 0 &&
+                                  !ledger.loading &&
+                                  !ledger.error && (
+                                    <Text style={styles.emptyLedgerText}>
+                                      No collection history recorded yet for this loan.
+                                    </Text>
+                                  )}
+                              </>
+                            )}
+                          </>
+                        );
+                      })()}
                     </View>
                   );
                 })
@@ -540,54 +692,104 @@ export function CustomerDetailsModal({
                       </View>
 
                       {/* Passbook Toggle */}
-                      <TouchableOpacity
-                        style={styles.ledgerToggle}
-                        onPress={() => {
-                          if (!ledger?.items?.length) {
-                            loadPigmyLedger(pigmy.pigmyId);
-                          }
-                        }}
-                      >
-                        <Text style={styles.ledgerToggleText}>
-                          📖 View Savings Passbook
-                        </Text>
-                      </TouchableOpacity>
+                      {(() => {
+                        const isExpanded = Boolean(expandedLedgers[pigmy.pigmyId]);
+                        return (
+                          <>
+                            <TouchableOpacity
+                              style={styles.ledgerToggle}
+                              onPress={() => handleTogglePigmyLedger(pigmy.pigmyId)}
+                              activeOpacity={0.7}
+                            >
+                              <View style={styles.ledgerToggleInner}>
+                                <Text style={styles.ledgerToggleText}>
+                                  📖 Savings Passbook History
+                                  {isExpanded && ledger?.items && ledger.items.length > 0
+                                    ? ` (${ledger.items.length})`
+                                    : ""}
+                                </Text>
+                                <View style={styles.ledgerActionGroup}>
+                                  {isExpanded && (
+                                    <TouchableOpacity
+                                      style={styles.ledgerRefreshBadge}
+                                      onPress={(e) => {
+                                        e.stopPropagation();
+                                        loadPigmyLedger(pigmy.pigmyId);
+                                      }}
+                                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                                    >
+                                      <Text style={styles.ledgerRefreshText}>🔄 Refresh</Text>
+                                    </TouchableOpacity>
+                                  )}
+                                  <Text style={styles.ledgerChevron}>
+                                    {isExpanded ? "▲" : "▼"}
+                                  </Text>
+                                </View>
+                              </View>
+                            </TouchableOpacity>
 
-                      {ledger?.loading && (
-                        <ActivityIndicator
-                          style={{ marginVertical: 8 }}
-                          color="#00A859"
-                        />
-                      )}
+                            {isExpanded && (
+                              <>
+                                {ledger?.loading && (
+                                  <ActivityIndicator
+                                    style={{ marginVertical: 8 }}
+                                    color="#00A859"
+                                  />
+                                )}
 
-                      {ledger?.items && ledger.items.length > 0 && (
-                        <View style={styles.ledgerList}>
-                          {ledger.items.map((item, idx) => (
-                            <View key={idx} style={styles.ledgerRow}>
-                              <Text style={styles.ledgerDate}>
-                                {item.collectionDate}
-                              </Text>
-                              <Text style={styles.ledgerAmount}>
-                                +₹{item.amount.toLocaleString("en-IN")}
-                              </Text>
-                              <Text style={styles.ledgerStatus}>
-                                Bal: ₹
-                                {(
-                                  item.totalSavedAmount || item.amount
-                                ).toLocaleString("en-IN")}
-                              </Text>
-                            </View>
-                          ))}
-                        </View>
-                      )}
+                                {ledger?.error && !ledger.loading && (
+                                  <View style={styles.ledgerErrorBox}>
+                                    <Text style={styles.ledgerErrorText}>⚠️ {ledger.error}</Text>
+                                    <TouchableOpacity
+                                      style={styles.ledgerRetryBtn}
+                                      onPress={() => loadPigmyLedger(pigmy.pigmyId)}
+                                    >
+                                      <Text style={styles.ledgerRetryBtnText}>Retry</Text>
+                                    </TouchableOpacity>
+                                  </View>
+                                )}
 
-                      {ledger?.items &&
-                        ledger.items.length === 0 &&
-                        !ledger.loading && (
-                          <Text style={styles.emptyLedgerText}>
-                            No deposits recorded yet for this pigmy account.
-                          </Text>
-                        )}
+                                {ledger?.items && ledger.items.length > 0 && (
+                                  <View style={styles.ledgerList}>
+                                    {ledger.items.map((item, idx) => {
+                                      const rawDateStr = item.collectionDate || item.createdAt;
+                                      const cleanDate = rawDateStr ? String(rawDateStr).split("T")[0] : "N/A";
+                                      const isToday = cleanDate === new Date().toISOString().split("T")[0];
+
+                                      return (
+                                        <View key={item.collectionId || item._id || idx} style={styles.ledgerRow}>
+                                          <View style={styles.ledgerDateWrap}>
+                                            <Text style={styles.ledgerDate}>
+                                              {cleanDate}
+                                            </Text>
+                                            {isToday && (
+                                              <View style={styles.todayPill}>
+                                                <Text style={styles.todayPillText}>Today</Text>
+                                              </View>
+                                            )}
+                                          </View>
+                                          <Text style={styles.ledgerAmount}>
+                                            +₹{item.amount.toLocaleString("en-IN")}
+                                          </Text>
+                                        </View>
+                                      );
+                                    })}
+                                  </View>
+                                )}
+
+                                {ledger?.items &&
+                                  ledger.items.length === 0 &&
+                                  !ledger.loading &&
+                                  !ledger.error && (
+                                    <Text style={styles.emptyLedgerText}>
+                                      No deposits recorded yet for this pigmy account.
+                                    </Text>
+                                  )}
+                              </>
+                            )}
+                          </>
+                        );
+                      })()}
                     </View>
                   );
                 })
@@ -970,16 +1172,87 @@ const styles = StyleSheet.create({
   ledgerToggle: {
     marginTop: 14,
     paddingVertical: 10,
+    paddingHorizontal: 8,
     backgroundColor: "#f0fdf4",
     borderRadius: 10,
-    alignItems: "center",
     borderWidth: 1,
     borderColor: "#bbf7d0",
+  },
+  ledgerToggleInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    width: "100%",
   },
   ledgerToggleText: {
     color: "#00A859",
     fontWeight: "700",
     fontSize: 13,
+  },
+  ledgerRefreshBadge: {
+    backgroundColor: "#dcfce7",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  ledgerRefreshText: {
+    color: "#00A859",
+    fontWeight: "700",
+    fontSize: 11,
+  },
+  ledgerActionGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  ledgerChevron: {
+    fontSize: 12,
+    color: "#00A859",
+    fontWeight: "800",
+  },
+  ledgerDateWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  todayPill: {
+    backgroundColor: "#dcfce7",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: 6,
+  },
+  todayPillText: {
+    color: "#059669",
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  ledgerErrorBox: {
+    marginTop: 8,
+    padding: 10,
+    backgroundColor: "#fef2f2",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#fee2e2",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  ledgerErrorText: {
+    fontSize: 12,
+    color: "#dc2626",
+    flex: 1,
+    marginRight: 8,
+  },
+  ledgerRetryBtn: {
+    backgroundColor: "#fee2e2",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  ledgerRetryBtnText: {
+    color: "#dc2626",
+    fontWeight: "700",
+    fontSize: 11,
   },
   ledgerList: {
     marginTop: 12,
@@ -990,6 +1263,7 @@ const styles = StyleSheet.create({
   ledgerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "center",
     paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: "#f3f4f6",

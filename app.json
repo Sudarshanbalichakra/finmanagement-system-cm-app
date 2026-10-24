@@ -4,7 +4,7 @@
     "slug": "cm-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/sufisys_app_icon_round.png",
     "scheme": "porterclone",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,

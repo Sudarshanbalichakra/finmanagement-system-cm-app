@@ -119,7 +119,7 @@ export default function CMLoginScreen() {
               render={({ field: { onChange, value } }) => (
                 <Input
                   label="Collection Manager ID"
-                  placeholder="Enter CM ID (e.g. CM-0001)"
+                  placeholder="Enter CM ID"
                   value={value}
                   onChangeText={(text) => {
                     setErrorMessage(null);

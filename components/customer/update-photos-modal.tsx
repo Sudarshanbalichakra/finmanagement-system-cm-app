@@ -1,3 +1,5 @@
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -11,8 +13,6 @@ import {
 } from "react-native";
 import { Text } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
-import * as ImagePicker from "expo-image-picker";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 import { MobileApi } from "@/services/api";
 import { CustomerFeedItem } from "@/types/cm.types";
@@ -39,7 +39,9 @@ export const UpdatePhotosModal = React.memo(function UpdatePhotosModal({
   onClose,
   onSuccess,
 }: UpdatePhotosModalProps) {
-  const [customerPhoto, setCustomerPhoto] = useState<SelectedPhoto | null>(null);
+  const [customerPhoto, setCustomerPhoto] = useState<SelectedPhoto | null>(
+    null,
+  );
   const [idProofPhoto, setIdProofPhoto] = useState<SelectedPhoto | null>(null);
   const [optimizingTarget, setOptimizingTarget] = useState<
     "customer" | "idProof" | null
@@ -65,7 +67,7 @@ export const UpdatePhotosModal = React.memo(function UpdatePhotosModal({
 
   const handlePickPhoto = async (
     target: "customer" | "idProof",
-    source: "camera" | "gallery"
+    source: "camera" | "gallery",
   ) => {
     try {
       setErrorMessage(null);
@@ -77,7 +79,7 @@ export const UpdatePhotosModal = React.memo(function UpdatePhotosModal({
         if (status !== "granted") {
           Alert.alert(
             "Permission Required",
-            "Camera access is required to take photos. Please enable permissions in device settings."
+            "Camera access is required to take photos. Please enable permissions in device settings.",
           );
           return;
         }
@@ -89,11 +91,12 @@ export const UpdatePhotosModal = React.memo(function UpdatePhotosModal({
           quality: 0.9,
         });
       } else {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        const { status } =
+          await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== "granted") {
           Alert.alert(
             "Permission Required",
-            "Media library access is required to choose photos from your device."
+            "Media library access is required to choose photos from your device.",
           );
           return;
         }
@@ -135,7 +138,10 @@ export const UpdatePhotosModal = React.memo(function UpdatePhotosModal({
       }
     } catch (err: any) {
       setErrorMessage(
-        getFriendlyErrorMessage(err, "Unable to select photo. Please try again.")
+        getFriendlyErrorMessage(
+          err,
+          "Unable to select photo. Please try again.",
+        ),
       );
     }
   };
@@ -143,7 +149,7 @@ export const UpdatePhotosModal = React.memo(function UpdatePhotosModal({
   const handleUpload = async () => {
     if (!customerPhoto && !idProofPhoto) {
       setErrorMessage(
-        "Please select at least one photo (Customer Photo or ID Proof) to upload."
+        "Please select at least one photo (Customer Photo or ID Proof) to upload.",
       );
       return;
     }
@@ -169,17 +175,17 @@ export const UpdatePhotosModal = React.memo(function UpdatePhotosModal({
                 onClose();
               },
             },
-          ]
+          ],
         );
       } else {
         setErrorMessage(
-          res?.message || "Failed to update customer photos. Please try again."
+          res?.message || "Failed to update customer photos. Please try again.",
         );
       }
     } catch (err: any) {
       const msg = getFriendlyErrorMessage(
         err,
-        "Failed to upload photos. Please check your network and try again."
+        "Failed to upload photos. Please check your network and try again.",
       );
       setErrorMessage(msg);
     } finally {
@@ -188,9 +194,7 @@ export const UpdatePhotosModal = React.memo(function UpdatePhotosModal({
   };
 
   const canSubmit =
-    Boolean(customerPhoto || idProofPhoto) &&
-    !uploading &&
-    !optimizingTarget;
+    Boolean(customerPhoto || idProofPhoto) && !uploading && !optimizingTarget;
 
   return (
     <Modal
@@ -199,12 +203,19 @@ export const UpdatePhotosModal = React.memo(function UpdatePhotosModal({
       transparent={false}
       onRequestClose={onClose}
     >
-      <SafeAreaView style={styles.safeArea} edges={["top", "bottom", "left", "right"]}>
+      <SafeAreaView
+        style={styles.safeArea}
+        edges={["top", "bottom", "left", "right"]}
+      >
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerTitleWrap}>
             <Text style={styles.headerBadge}>CUSTOMER KYC</Text>
-            <Text variant="titleLarge" style={styles.customerName} numberOfLines={1}>
+            <Text
+              variant="titleLarge"
+              style={styles.customerName}
+              numberOfLines={1}
+            >
               {customer.customerName}
             </Text>
             <Text style={styles.customerIdText}>
@@ -236,12 +247,16 @@ export const UpdatePhotosModal = React.memo(function UpdatePhotosModal({
           <View style={styles.cardSection}>
             <View style={styles.cardHeader}>
               <View style={styles.iconCircle}>
-                <MaterialCommunityIcons name="account-box" size={22} color="#00A859" />
+                <MaterialCommunityIcons
+                  name="account-box"
+                  size={22}
+                  color="#00A859"
+                />
               </View>
               <View style={styles.cardTitleWrap}>
-                <Text style={styles.sectionTitle}>1. Customer Portrait Photo</Text>
+                <Text style={styles.sectionTitle}>1. Customer Photo</Text>
                 <Text style={styles.sectionSubtitle}>
-                  Clear passport-style portrait of the customer
+                  Clear passport-style photo of the customer
                 </Text>
               </View>
               {currentPhotoUploaded ? (
@@ -313,7 +328,11 @@ export const UpdatePhotosModal = React.memo(function UpdatePhotosModal({
                   onPress={() => handlePickPhoto("customer", "camera")}
                   disabled={uploading || Boolean(optimizingTarget)}
                 >
-                  <MaterialCommunityIcons name="camera" size={22} color="#00A859" />
+                  <MaterialCommunityIcons
+                    name="camera"
+                    size={22}
+                    color="#00A859"
+                  />
                   <Text style={styles.pickerBtnText}>Take Photo</Text>
                 </TouchableOpacity>
 
@@ -322,7 +341,11 @@ export const UpdatePhotosModal = React.memo(function UpdatePhotosModal({
                   onPress={() => handlePickPhoto("customer", "gallery")}
                   disabled={uploading || Boolean(optimizingTarget)}
                 >
-                  <MaterialCommunityIcons name="image" size={22} color="#00A859" />
+                  <MaterialCommunityIcons
+                    name="image"
+                    size={22}
+                    color="#00A859"
+                  />
                   <Text style={styles.pickerBtnText}>From Gallery</Text>
                 </TouchableOpacity>
               </View>
@@ -340,7 +363,9 @@ export const UpdatePhotosModal = React.memo(function UpdatePhotosModal({
                 />
               </View>
               <View style={styles.cardTitleWrap}>
-                <Text style={styles.sectionTitle}>2. Customer ID Proof Photo</Text>
+                <Text style={styles.sectionTitle}>
+                  2. Customer ID Proof Photo
+                </Text>
                 <Text style={styles.sectionSubtitle}>
                   Aadhaar, Voter ID, PAN, or Govt Issued Document
                 </Text>
@@ -357,7 +382,12 @@ export const UpdatePhotosModal = React.memo(function UpdatePhotosModal({
             </View>
 
             {optimizingTarget === "idProof" ? (
-              <View style={[styles.optimizingContainer, styles.optimizingContainerDoc]}>
+              <View
+                style={[
+                  styles.optimizingContainer,
+                  styles.optimizingContainerDoc,
+                ]}
+              >
                 <ActivityIndicator size="small" color="#2563eb" />
                 <Text style={[styles.optimizingText, { color: "#1d4ed8" }]}>
                   Optimizing ID proof below 1MB...
@@ -414,7 +444,11 @@ export const UpdatePhotosModal = React.memo(function UpdatePhotosModal({
                   onPress={() => handlePickPhoto("idProof", "camera")}
                   disabled={uploading || Boolean(optimizingTarget)}
                 >
-                  <MaterialCommunityIcons name="camera" size={22} color="#2563eb" />
+                  <MaterialCommunityIcons
+                    name="camera"
+                    size={22}
+                    color="#2563eb"
+                  />
                   <Text style={styles.pickerBtnText}>Take Photo</Text>
                 </TouchableOpacity>
 
@@ -423,7 +457,11 @@ export const UpdatePhotosModal = React.memo(function UpdatePhotosModal({
                   onPress={() => handlePickPhoto("idProof", "gallery")}
                   disabled={uploading || Boolean(optimizingTarget)}
                 >
-                  <MaterialCommunityIcons name="image" size={22} color="#2563eb" />
+                  <MaterialCommunityIcons
+                    name="image"
+                    size={22}
+                    color="#2563eb"
+                  />
                   <Text style={styles.pickerBtnText}>From Gallery</Text>
                 </TouchableOpacity>
               </View>
@@ -463,7 +501,11 @@ export const UpdatePhotosModal = React.memo(function UpdatePhotosModal({
           >
             {uploading ? (
               <View style={styles.uploadingRow}>
-                <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 8 }} />
+                <ActivityIndicator
+                  size="small"
+                  color="#ffffff"
+                  style={{ marginRight: 8 }}
+                />
                 <Text style={styles.uploadBtnText}>Uploading Photos...</Text>
               </View>
             ) : (

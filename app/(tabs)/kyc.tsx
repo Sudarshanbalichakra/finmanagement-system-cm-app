@@ -1,5 +1,6 @@
-import { useFocusEffect } from "expo-router";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Network from "expo-network";
+import { useFocusEffect } from "expo-router";
 import React, {
   useCallback,
   useDeferredValue,
@@ -20,7 +21,6 @@ import {
 } from "react-native";
 import { Text } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 import { OfflineFallback } from "@/components/common/offline-fallback";
 import { UpdatePhotosModal } from "@/components/customer/update-photos-modal";
@@ -48,58 +48,55 @@ export default function CustomerKycScreen() {
     useState<CustomerFeedItem | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
 
-  const fetchCustomers = useCallback(
-    async (isManualRefresh = false) => {
-      if (isManualRefresh) {
-        setRefreshing(true);
+  const fetchCustomers = useCallback(async (isManualRefresh = false) => {
+    if (isManualRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+    setErrorMessage(null);
+
+    // Pre-flight internet check
+    const netStatus = await checkNetworkConnectivity();
+    if (!netStatus.isOnline) {
+      setIsOffline(true);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+    setIsOffline(false);
+
+    try {
+      const todayDate = new Date().toISOString().split("T")[0];
+      const res = await MobileApi.getMobileFeed(todayDate);
+      if (res.success && res.data) {
+        setFeedData(res.data);
       } else {
-        setLoading(true);
-      }
-      setErrorMessage(null);
-
-      // Pre-flight internet check
-      const netStatus = await checkNetworkConnectivity();
-      if (!netStatus.isOnline) {
-        setIsOffline(true);
-        setLoading(false);
-        setRefreshing(false);
-        return;
-      }
-      setIsOffline(false);
-
-      try {
-        const todayDate = new Date().toISOString().split("T")[0];
-        const res = await MobileApi.getMobileFeed(todayDate);
-        if (res.success && res.data) {
-          setFeedData(res.data);
-        } else {
-          setErrorMessage(
-            getFriendlyErrorMessage(
-              res.message,
-              "Unable to load customer list for KYC verification.",
-            ),
-          );
-        }
-      } catch (err: any) {
-        if (err.message === "Network Error" || !err.response) {
-          const recheck = await checkNetworkConnectivity();
-          if (!recheck.isOnline) {
-            setIsOffline(true);
-          }
-        }
         setErrorMessage(
           getFriendlyErrorMessage(
-            err,
+            res.message,
             "Unable to load customer list for KYC verification.",
           ),
         );
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
       }
-    },
-    [],
-  );
+    } catch (err: any) {
+      if (err.message === "Network Error" || !err.response) {
+        const recheck = await checkNetworkConnectivity();
+        if (!recheck.isOnline) {
+          setIsOffline(true);
+        }
+      }
+      setErrorMessage(
+        getFriendlyErrorMessage(
+          err,
+          "Unable to load customer list for KYC verification.",
+        ),
+      );
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
 
   // Auto-refresh every time the tab is switched to
   useFocusEffect(
@@ -240,144 +237,146 @@ export default function CustomerKycScreen() {
   };
 
   // Render Item for Customer KYC Card
-  const renderItem = useCallback(
-    ({ item }: { item: CustomerFeedItem }) => {
-      const hasPhoto = Boolean(item.customerPhoto);
-      const hasId = Boolean(item.idProofPhoto);
-      const isComplete = hasPhoto && hasId;
-      const initialChar = item.customerName
-        ? item.customerName.charAt(0).toUpperCase()
-        : "C";
+  const renderItem = useCallback(({ item }: { item: CustomerFeedItem }) => {
+    const hasPhoto = Boolean(item.customerPhoto);
+    const hasId = Boolean(item.idProofPhoto);
+    const isComplete = hasPhoto && hasId;
+    const initialChar = item.customerName
+      ? item.customerName.charAt(0).toUpperCase()
+      : "C";
 
-      return (
-        <View style={styles.kycCard}>
-          {/* Card Top: Avatar, Name, and Overall Status */}
-          <View style={styles.cardHeader}>
-            <View style={styles.avatarCircle}>
-              <Text style={styles.avatarText}>{initialChar}</Text>
-            </View>
-
-            <View style={styles.headerInfo}>
-              <View style={styles.nameRow}>
-                <Text
-                  variant="titleMedium"
-                  style={[styles.customerName, { textTransform: "capitalize" }]}
-                  numberOfLines={1}
-                >
-                  {item.customerName}
-                </Text>
-                {isComplete ? (
-                  <View style={styles.badgeVerified}>
-                    <Text style={styles.badgeVerifiedText}>✅ KYC Complete</Text>
-                  </View>
-                ) : (
-                  <View style={styles.badgeIncomplete}>
-                    <Text style={styles.badgeIncompleteText}>⚠️ KYC Pending</Text>
-                  </View>
-                )}
-              </View>
-
-              <View style={styles.subInfoRow}>
-                <Text style={styles.customerIdText}>ID: {item.customerId}</Text>
-                {item.mobile ? (
-                  <TouchableOpacity
-                    onPress={() => handleCall(item.mobile)}
-                    style={styles.callBadge}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Text style={styles.callBadgeText}>📞 {item.mobile}</Text>
-                  </TouchableOpacity>
-                ) : null}
-              </View>
-            </View>
+    return (
+      <View style={styles.kycCard}>
+        {/* Card Top: Avatar, Name, and Overall Status */}
+        <View style={styles.cardHeader}>
+          <View style={styles.avatarCircle}>
+            <Text style={styles.avatarText}>{initialChar}</Text>
           </View>
 
-          {item.address ? (
-            <Text style={styles.addressText} numberOfLines={1}>
-              📍 {item.address}
-            </Text>
-          ) : null}
-
-          {/* Verification Status Breakdown */}
-          <View style={styles.statusSection}>
-            <View
-              style={[
-                styles.statusPillItem,
-                hasPhoto ? styles.statusPillItemDone : styles.statusPillItemMissing,
-              ]}
-            >
-              <MaterialCommunityIcons
-                name={hasPhoto ? "check-circle" : "alert-circle-outline"}
-                size={18}
-                color={hasPhoto ? "#059669" : "#d97706"}
-                style={{ marginRight: 6 }}
-              />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.statusPillLabel}>Customer Portrait</Text>
-                <Text
-                  style={[
-                    styles.statusPillValue,
-                    hasPhoto
-                      ? styles.statusPillValueDone
-                      : styles.statusPillValueMissing,
-                  ]}
-                >
-                  {hasPhoto ? "Photo Uploaded" : "Missing Photo"}
-                </Text>
-              </View>
+          <View style={styles.headerInfo}>
+            <View style={styles.nameRow}>
+              <Text
+                variant="titleMedium"
+                style={[styles.customerName, { textTransform: "capitalize" }]}
+                numberOfLines={1}
+              >
+                {item.customerName}
+              </Text>
+              {isComplete ? (
+                <View style={styles.badgeVerified}>
+                  <Text style={styles.badgeVerifiedText}>✅ KYC Complete</Text>
+                </View>
+              ) : (
+                <View style={styles.badgeIncomplete}>
+                  <Text style={styles.badgeIncompleteText}>⚠️ KYC Pending</Text>
+                </View>
+              )}
             </View>
 
-            <View
-              style={[
-                styles.statusPillItem,
-                hasId ? styles.statusPillItemDone : styles.statusPillItemMissing,
-              ]}
-            >
-              <MaterialCommunityIcons
-                name={hasId ? "check-circle" : "alert-circle-outline"}
-                size={18}
-                color={hasId ? "#059669" : "#d97706"}
-                style={{ marginRight: 6 }}
-              />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.statusPillLabel}>ID Proof Document</Text>
-                <Text
-                  style={[
-                    styles.statusPillValue,
-                    hasId
-                      ? styles.statusPillValueDone
-                      : styles.statusPillValueMissing,
-                  ]}
+            <View style={styles.subInfoRow}>
+              <Text style={styles.customerIdText}>ID: {item.customerId}</Text>
+              {item.mobile ? (
+                <TouchableOpacity
+                  onPress={() => handleCall(item.mobile)}
+                  style={styles.callBadge}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  {hasId ? "ID Uploaded" : "Missing ID Proof"}
-                </Text>
-              </View>
+                  <Text style={styles.callBadgeText}>📞 {item.mobile}</Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
           </View>
+        </View>
 
-          {/* Action Button */}
-          <TouchableOpacity
-            style={styles.actionBtn}
-            onPress={() => handleOpenUpdateModal(item)}
-            activeOpacity={0.85}
+        {item.address ? (
+          <Text style={styles.addressText} numberOfLines={1}>
+            📍 {item.address}
+          </Text>
+        ) : null}
+
+        {/* Verification Status Breakdown */}
+        <View style={styles.statusSection}>
+          <View
+            style={[
+              styles.statusPillItem,
+              hasPhoto
+                ? styles.statusPillItemDone
+                : styles.statusPillItemMissing,
+            ]}
           >
             <MaterialCommunityIcons
-              name="camera-plus-outline"
+              name={hasPhoto ? "check-circle" : "alert-circle-outline"}
               size={18}
-              color="#ffffff"
+              color={hasPhoto ? "#059669" : "#d97706"}
               style={{ marginRight: 6 }}
             />
-            <Text style={styles.actionBtnText}>
-              {isComplete ? "Update KYC Photos" : "Upload Missing Photos"}
-            </Text>
-          </TouchableOpacity>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.statusPillLabel}>Customer Photo</Text>
+              <Text
+                style={[
+                  styles.statusPillValue,
+                  hasPhoto
+                    ? styles.statusPillValueDone
+                    : styles.statusPillValueMissing,
+                ]}
+              >
+                {hasPhoto ? "Photo Uploaded" : "Missing Photo"}
+              </Text>
+            </View>
+          </View>
+
+          <View
+            style={[
+              styles.statusPillItem,
+              hasId ? styles.statusPillItemDone : styles.statusPillItemMissing,
+            ]}
+          >
+            <MaterialCommunityIcons
+              name={hasId ? "check-circle" : "alert-circle-outline"}
+              size={18}
+              color={hasId ? "#059669" : "#d97706"}
+              style={{ marginRight: 6 }}
+            />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.statusPillLabel}>ID Proof Photo</Text>
+              <Text
+                style={[
+                  styles.statusPillValue,
+                  hasId
+                    ? styles.statusPillValueDone
+                    : styles.statusPillValueMissing,
+                ]}
+              >
+                {hasId ? "ID Uploaded" : "Missing ID Proof"}
+              </Text>
+            </View>
+          </View>
         </View>
-      );
-    },
+
+        {/* Action Button */}
+        <TouchableOpacity
+          style={styles.actionBtn}
+          onPress={() => handleOpenUpdateModal(item)}
+          activeOpacity={0.85}
+        >
+          <MaterialCommunityIcons
+            name="camera-plus-outline"
+            size={18}
+            color="#ffffff"
+            style={{ marginRight: 6 }}
+          />
+          <Text style={styles.actionBtnText}>
+            {isComplete ? "Update KYC Photos" : "Upload Missing Photos"}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }, []);
+
+  const keyExtractor = useCallback(
+    (item: CustomerFeedItem) => item.customerId,
     [],
   );
-
-  const keyExtractor = useCallback((item: CustomerFeedItem) => item.customerId, []);
 
   // Header Component for FlatList
   const renderHeader = useMemo(() => {
@@ -391,7 +390,7 @@ export default function CustomerKycScreen() {
               Customer KYC
             </Text>
             <Text style={styles.screenSubtitle}>
-              Capture and update customer portraits & ID proofs
+              Capture and update customer photo & ID proofs
             </Text>
           </View>
           <TouchableOpacity

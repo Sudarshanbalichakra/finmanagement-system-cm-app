@@ -331,7 +331,7 @@ export const CustomerCard = React.memo(
                   pigmyStatus.isSelf ? (
                     <View style={styles.pillStatusDoneBox}>
                       <Text style={styles.pillStatusDoneText}>
-                        ✅ Today Collection Collected
+                        ✅ Collected
                         {pigmyStatus.collectedAmount > 0
                           ? ` (₹${pigmyStatus.collectedAmount})`
                           : ""}

@@ -345,6 +345,16 @@ export default function HomeScreen() {
     [handleOpenCollect],
   );
 
+  // Dynamically resolve the selected customer from fresh feedData so passbook and collection modals stay in sync
+  const activeCustomer = useMemo(() => {
+    if (!selectedCustomer || !feedData?.customers) return selectedCustomer;
+    return (
+      feedData.customers.find(
+        (c) => c.customerId === selectedCustomer.customerId,
+      ) || selectedCustomer
+    );
+  }, [selectedCustomer, feedData?.customers]);
+
   // High-performance memoized filter list using getCustomerVisitedStatus
   const filteredCustomers = useMemo(() => {
     const rawList = feedData?.customers;
@@ -730,7 +740,7 @@ export default function HomeScreen() {
       {/* Collect Cash Modal */}
       <CollectCashModal
         visible={collectModalVisible}
-        customer={selectedCustomer}
+        customer={activeCustomer}
         initialType={initialCollectType}
         initialLoanId={initialTargetId}
         initialPigmyId={initialTargetId}
@@ -742,7 +752,7 @@ export default function HomeScreen() {
       {/* Customer Passbook Modal */}
       <CustomerDetailsModal
         visible={detailsModalVisible}
-        customer={selectedCustomer}
+        customer={activeCustomer}
         onClose={handleCloseDetails}
         onOpenCollect={handleDetailsToCollect}
       />
